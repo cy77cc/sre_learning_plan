@@ -2053,8 +2053,6 @@ def review_document(content: str, topic: str) -> List[str]:
         r'方案1',
         r'问题1',
         r'# 在此.*练习',      # "# 在此完成练习" 类
-        r'思考 \d+：\.\.\.',  # "思考 1：..." 类
-        r'问题描述.*如何解决', # 表格空内容
     ]
     
     for pattern in placeholder_patterns:
