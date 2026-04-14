@@ -1,7 +1,7 @@
 # Day 01: Linux 简介与虚拟机安装
 
-> 📅 日期：2026-04-13  
-> 📖 学习主题：Linux 简介与虚拟机安装 - Ubuntu 22.04 LTS 安装与基础配置  
+> 📅 日期：2026-04-14  
+> 📖 学习主题：Linux 简介与虚拟机安装  
 > ⏰ 计划学习时间：2-3 小时
 
 ---
@@ -9,667 +9,445 @@
 ## 🎯 学习目标
 
 完成 Day 01 的学习后，你应该掌握：
-
-- [ ] 理解 Linux 的历史、哲学和发行版体系
-- [ ] 掌握 VirtualBox/WMWare/WSL2 的安装方法
-- [ ] 能够独立完成 Ubuntu 22.04 LTS 的安装
-- [ ] 熟悉 Ubuntu 桌面环境的基本操作
-- [ ] 学会更新系统并安装基础软件
+- 理解 Linux 简介与虚拟机安装 的核心概念和原理
+- 能够独立完成相关命令的操作练习
+- 在实际工作中正确应用这些知识
+- 为 SRE 进阶打下坚实基础
 
 ---
 
-## 📖 第一部分：Linux 简介
+## 📖 详细知识点
 
-### 1.1 什么是 Linux？
+### 1. Linux 简介
 
-Linux 是一个**开源的 Unix-like 操作系统内核**，由 Linus Torvalds 于 1991 年首次发布。如今，Linux 已经成为：
+#### 1.1 什么是 Linux？
 
-| 领域 | 市场占有率 |
-|------|-----------|
-| 服务器 | **~96%** 的 Web 服务器 |
-| 超级计算机 | **100%** 的 TOP500 超级计算机 |
-| 云计算 | AWS、Azure、GCP 等主流云平台 |
-| 移动设备 | Android 系统基于 Linux |
-| 嵌入式 | 路由器、智能设备等 |
+Linux 是一个**开源的 Unix-like 操作系统内核**，由 Linus Torvalds 于 1991 年首次发布。如今 Linux 几乎运行在所有关键基础设施上：
 
-### 1.2 Linux 的历史
+| 领域 | 市场份额 | 代表场景 |
+|------|---------|---------|
+| 服务器 | **~96%** | AWS EC2、GCP、阿里云等 |
+| 超级计算机 | **100%** | TOP500 全部运行 Linux |
+| 云计算 | **90%+** | Docker、Kubernetes、云原生 |
+| 移动设备 | **85%+** | Android 系统基于 Linux 内核 |
+| 嵌入式 | **60%+** | 路由器、智能电视、汽车 |
+
+#### 1.2 Linux 核心哲学
 
 ```
-1991年 - Linus Torvalds 在芬兰赫尔辛基大学开始开发 Linux
-1992年 - Linux 采用 GPL 许可证开源
-1994年 - Linux 1.0.0 正式发布
-2003年 - 进入企业级市场（Red Hat Enterprise Linux）
-2007年 - 成立 Linux 基金会
-今天   - 已成为全球最重要的开源项目
+一切皆文件        — 硬件设备、进程、配置都用文件抽象
+小而专一工具       — 每个命令只做一件事，通过管道组合
+开源共享          — GPL 许可证，全球开发者共同维护
+跨平台兼容        — x86、ARM、RISC-V、MIPS 等全支持
 ```
 
-### 1.3 Linux 核心哲学
+#### 1.3 常见 Linux 发行版对比
 
-Linux 遵循 **Unix 哲学**，核心原则包括：
+| 发行版 | 家族 | 特点 | 适用场景 |
+|--------|------|------|---------|
+| **Ubuntu Server/Desktop** | Debian | 社区活跃、文档丰富 | SRE 入门首选 |
+| **Rocky Linux / AlmaLinux** | RHEL | 100% 兼容 RHEL、长期支持 | 生产服务器 |
+| **Debian** | Debian | 极其稳定、软件版本偏保守 | 追求稳定的服务器 |
+| **Arch Linux** | Arch | 滚动更新、配置灵活 | 高级用户、定制系统 |
+| **Alpine** | Independent | 极简镜像（5MB） | 容器化、嵌入式 |
+| **Flatcar Container Linux** | CoreOS | 容器优化、自动更新 | Kubernetes 节点 |
 
-1. **小而专一**：每个程序只做一件事，但做到最好
-2. **组合出奇迹**：程序之间通过管道协作
-3. **一切皆文件**：设备、进程、配置都通过文件系统呈现
-4. **开源共享**：代码自由分发，全世界共同维护
-
-### 1.4 常见 Linux 发行版
-
-#### 发行版家族
-
-| 类型 | 代表发行版 | 特点 | 适用场景 |
-|------|-----------|------|---------|
-| **Debian 系** | Ubuntu, Linux Mint, Pop!_OS | 稳定、友好 | 桌面、服务器 |
-| **Red Hat 系** | RHEL, CentOS Stream, Rocky Linux | 企业级、稳定性 | 生产服务器 |
-| **SUSE 系** | openSUSE, SLES | 企业级支持 | 关键业务 |
-| **Arch 系** | Arch Linux, Manjaro | 滚动更新、定制化 | 高级用户 |
-| **容器化** | Alpine, Flatcar | 轻量级 | 容器、K8s |
-
-#### 主流选择推荐
-
-| 使用场景 | 推荐发行版 | 理由 |
-|---------|-----------|------|
-| **SRE/运维入门** | Ubuntu Server 22.04 LTS | 文档丰富、社区活跃 |
-| **生产服务器** | Ubuntu Server 22.04 LTS / Rocky Linux 9 | 稳定、长期支持 |
-| **桌面开发** | Ubuntu Desktop 22.04 LTS | 界面友好、软件丰富 |
-| **追求新特性** | Fedora | 最新内核和技术 |
-| **极简主义** | Arch Linux | 完全定制 |
+**SRE 推荐**：入门用 **Ubuntu 22.04 LTS**，生产用 **Rocky Linux 9** 或 **Ubuntu LTS**。
 
 ---
 
-## 📖 第二部分：虚拟机软件选择
+### 2. 虚拟机软件选择
 
-### 2.1 常见虚拟机软件对比
+#### 2.1 主流虚拟机软件对比
 
-| 软件 | 优点 | 缺点 | 平台 | 推荐度 |
+| 软件 | 费用 | 平台 | 性能 | 推荐度 |
 |------|------|------|------|--------|
-| **VirtualBox** | 免费开源、跨平台、功能完善 | 性能一般、界面较老 | 全平台 | ⭐⭐⭐⭐ |
-| **VMware Workstation Pro** | 性能优秀、功能强大 | 付费、Linux 下免费版功能弱 | Win/Linux | ⭐⭐⭐⭐ |
-| **VMware Fusion** | macOS 下最佳选择 | 仅限 macOS、付费 | macOS | ⭐⭐⭐⭐ |
-| **Hyper-V** | Windows 内置、性能好 | 仅限 Windows、功能分散 | Windows | ⭐⭐⭐ |
-| **WSL2** | 与 Windows 无缝集成、占用资源少 | 不能运行桌面版 Linux、部分功能受限 | Windows 11 | ⭐⭐⭐⭐⭐ |
+| **WSL2** | 免费 | Windows 11 | 接近原生 | ⭐⭐⭐⭐⭐ (Windows 用户) |
+| **VirtualBox** | 免费开源 | 全平台 | 中等 | ⭐⭐⭐⭐ (通用学习) |
+| **VMware Workstation Pro** | 付费 | Win/Linux | 优秀 | ⭐⭐⭐⭐ (Windows 专业用户) |
+| **VMware Fusion** | 付费 | macOS | 优秀 | ⭐⭐⭐⭐ (macOS 专业用户) |
+| **Hyper-V** | 免费 | Windows | 优秀 | ⭐⭐⭐ (Windows Pro) |
 
-### 2.2 推荐：Windows 用户使用 WSL2
+#### 2.2 Windows 用户：WSL2 实战
 
-如果你使用 **Windows 11**，强烈推荐安装 WSL2：
+**WSL2 (Windows Subsystem for Linux 2)** 是 Windows 11 自带的 Linux 子系统，体验接近原生：
 
 ```powershell
-# 以管理员身份打开 PowerShell，运行以下命令：
-
-# 1. 启用 WSL 功能
+# 管理员 PowerShell 一键安装
 wsl --install
 
-# 2. 安装后重启计算机，然后设置 Ubuntu
-wsl --set-default-version 2
-wsl --install -d Ubuntu-22.04
+# 安装后重启，首次启动设置用户名密码
+# 默认安装 Ubuntu 22.04 LTS
 
-# 3. 首次启动设置用户名和密码
+# 常用 WSL2 命令
+wsl --list -v              # 查看已安装的发行版
+wsl --set-default-version 2  # 设置默认 WSL 版本为 2
+wsl -d Ubuntu-22.04        # 启动指定发行版
+wsl --shutdown             # 关闭所有 WSL 实例
+wsl -t Ubuntu-22.04       # 停止指定发行版
 ```
 
-**WSL2 优势：**
-- ✅ 原生集成，体验接近真实 Linux
-- ✅ 与 Windows 文件系统无缝互操作
-- ✅ 资源占用低，启动快
-- ✅ 支持 Docker Desktop 集成
-- ✅ 完美满足 SRE 学习需求
+**WSL2 的优势**：
+```
+✅ 与 Windows 文件系统无缝互操作（/mnt/c/）
+✅ 支持 Docker Desktop 集成
+✅ 资源占用低（比虚拟机少 50%+）
+✅ 启动快（2-3 秒 vs 虚拟机 30 秒+）
+✅ 可直接访问 Windows 剪贴板
+```
 
-### 2.3 macOS 用户推荐
+**WSL2 的局限**：
+```
+⚠️ 不能运行桌面版 Linux（无 GUI）
+⚠️ 不支持 Systemd（需要用 service 或手动启动）
+⚠️ 不支持内核模块
+⚠️ 文件 I/O 性能比原生 Linux 略低
+```
 
-| 选择 | 建议 |
-|------|------|
-| **VirtualBox** | 免费足够学习使用 |
-| **VMware Fusion** | 付费但性能更好 |
-| **Colima + Docker** | 如果只需要命令行环境 |
+**解决 WSL2 Systemd 问题**：
+```bash
+# 在 WSL2 中启用 Systemd
+sudo vim /etc/wsl.conf
+# 添加以下内容：
+# [boot]
+# systemd=true
 
-### 2.4 纯虚拟机安装（推荐 VirtualBox）
+# 重启 WSL2
+wsl --shutdown
+wsl -d Ubuntu-22.04
+```
 
-#### VirtualBox 下载地址
+#### 2.3 VirtualBox 安装实战
 
-| 组件 | 下载地址 |
-|------|---------|
-| VirtualBox 7.x | https://www.virtualbox.org/wiki/Downloads |
-| VirtualBox Extension Pack | 同上页面（增强功能需要） |
+**VirtualBox 下载**：
+- 官网：https://www.virtualbox.org/wiki/Downloads
+- 推荐版本：VirtualBox 7.x
+- 同时下载 **Extension Pack**（支持 USB 3.0、剪贴板共享等）
+
+**创建虚拟机配置**：
+
+| 配置项 | 最低要求 | 推荐配置 | 说明 |
+|--------|---------|---------|------|
+| CPU | 2 核 | 4 核 | 开启 PAE/NX |
+| 内存 | 4 GB | 8 GB | 桌面版建议 4GB+ |
+| 硬盘 | 25 GB | 50 GB+ | 动态分配 VDI |
+| 网络 | NAT | 桥接 | 桥接可获得独立 IP |
+
+**桥接网络 vs NAT**：
+```
+NAT：         虚拟机可以上网，宿主机可以访问虚拟机（端口转发）
+桥接网络：    虚拟机与宿主机在同一网络段，有独立 IP
+仅主机网络：  虚拟机与宿主机私有网络，外部无法访问
+```
+
+**VirtualBox 增强功能**：
+```bash
+# 1. 设备 → 插入增强功能镜像
+# 2. 在虚拟机中挂载并安装
+sudo mkdir -p /mnt/cdrom
+sudo mount /dev/cdrom /mnt/cdrom
+sudo /mnt/cdrom/VBoxLinuxAdditions.run
+
+# 3. 添加共享剪贴板和拖放
+#    设备 → 共享剪贴板 → 双向
+#    设备 → 拖放 → 双向
+```
 
 ---
 
-## 📖 第三部分：Ubuntu 22.04 LTS 安装详解
+### 3. Ubuntu 22.04 LTS 安装详解
 
-### 3.1 Ubuntu 22.04 LTS 介绍
+#### 3.1 Ubuntu 22.04 系统要求
 
-**Ubuntu 22.04 LTS (Jammy Jellyfish)** 是目前最推荐的 Linux 桌面/服务器版本：
-
-| 特性 | 说明 |
-|------|------|
-| **发布于** | 2022 年 4 月 21 日 |
-| **内核** | Linux 5.15 (可升级到 6.x) |
-| **桌面环境** | GNOME 42 |
-| **支持期限** | 10 年（到 2032 年） |
-| **Python 默认** | Python 3.10 |
-| **容器支持** | Docker、K8s 支持完善 |
-
-### 3.2 系统要求
-
-| 配置 | 最低要求 | 推荐配置 |
+| 组件 | 最低要求 | 推荐配置 |
 |------|---------|---------|
 | CPU | 1 GHz 双核 | 2 GHz 四核 |
-| 内存 | 4 GB | 8 GB 或更多 |
-| 磁盘 | 25 GB | 50 GB 或更多 |
-| 显卡 | 支持 VESA | 支持 3D 加速 |
-| 网络 | 可选 | 建议有网卡 |
+| 内存 | 4 GB | 8 GB+ |
+| 硬盘 | 25 GB | 50 GB+ |
+| 显卡 | VESA | 支持 3D 加速 |
+| 启动 | UEFI/BIOS | UEFI（推荐） |
 
-> ⚠️ **SRE 学习建议**：配置 **2 CPU + 4GB 内存 + 50GB 磁盘** 以上
+#### 3.2 Ubuntu 安装步骤
 
-### 3.3 安装步骤
+**第一步：下载镜像**
+```
+官方下载：https://ubuntu.com/download/desktop
+国内镜像：https://mirrors.tuna.tsinghua.edu.cn/ubuntu-releases/22.04/
+文件大小：约 4.8 GB（ubuntu-22.04.4-desktop-amd64.iso）
+```
 
-#### 第一步：下载 Ubuntu 镜像
-
-下载地址（推荐最新 LTS）：
-
-| 版本 | 下载链接 | 文件大小 |
-|------|---------|---------|
-| **Ubuntu 22.04.4 LTS** | [点击下载](https://ubuntu.com/download/desktop/thank-you?version=22.04.4&architecture=amd64) | ~4.8 GB |
-| Ubuntu 24.04 LTS | [点击下载](https://ubuntu.com/download/desktop/thank-you?version=24.04.4&architecture=amd64) | ~5.9 GB |
-
-#### 第二步：创建虚拟机（VirtualBox）
-
-1. 打开 VirtualBox → 点击 **"新建"**
-2. 填写虚拟机信息：
-   ```
-   名称：Ubuntu 22.04 SRE
+**第二步：创建 VirtualBox 虚拟机**
+```
+1. 点击 "新建"
+2. 名称：Ubuntu 22.04 SRE
    类型：Linux
    版本：Ubuntu (64-bit)
-   ```
-3. 分配内存：至少 **4096 MB**，推荐 **8192 MB**
-4. 创建虚拟硬盘：VDI 格式，**动态分配**，容量 **50 GB**
-5. 点击创建
+3. 内存：4096 MB（或 8192 MB）
+4. 硬盘：VDI 动态分配，50 GB
+5. 设置 → 系统 → 处理器：2 CPU
+6. 设置 → 存储 → SATA 控制器 → 选择 ISO 镜像
+7. 设置 → 网络 → 桥接网卡
+8. 点击 "启动"
+```
 
-#### 第三步：配置虚拟机
+**第三步：Ubuntu 安装过程**
+```
+1. 选择语言 → English（推荐，避免locale问题）
+2. 选择 "Install Ubuntu"
+3. 键盘布局 → Chinese（如果用中文键盘）或 English US
+4. 安装类型：
+   - "Erase disk and install Ubuntu"（仅学习用，干净整洁）
+   - "Something else"（自定义分区，生产推荐）
+5. 时区 → Asia/Shanghai
+6. 用户信息：
+   - Your name: SRE User
+   - Your computer's name: sre-server
+   - Pick a username: sreuser
+   - 密码：设置强密码
+7. 等待安装（约 10-15 分钟）
+8. 安装完成后重启
+```
 
-1. 选中创建的虚拟机 → **设置**
-2. **系统 → 主板**：
-   - 启动顺序：仅勾选"光驱"、"硬盘"
-   - 芯片组：ICH9
-   - 启用 EFI（可选）
-3. **系统 → 处理器**：
-   - CPU 数量：至少 2
-   - 启用 PAE/NX
-4. **存储 → 控制器：SATA**：
-   - 点击光驱图标 → 选择下载的 Ubuntu ISO 文件
-5. **网络 → 桥接模式**（或 NAT）：
-   - 桥接模式：虚拟机与宿主机在同一网络
-   - NAT：虚拟机可上网但与宿主机隔离
-
-#### 第四步：启动并安装 Ubuntu
-
-1. 启动虚拟机，进入 Ubuntu 启动菜单
-2. 选择 **"Install Ubuntu"**
-3. 语言选择：**English**（推荐）或简体中文
-4. 键盘布局：根据你的键盘选择
-5. 安装类型：
-   - 选择 **"Erase disk and install Ubuntu"**（仅学习用）
-   - 或选择 **"Something else"** 自定义分区
-6. 时区选择：上海（Asia/Shanghai）
-7. 创建用户：
-   ```
-   Your name: sre-user
-   Your computer's name: sre-server
-   Pick a username: sreuser
-   ```
-8. 等待安装完成（约 10-15 分钟）
-9. 安装完成后**重启**，登录系统
-
-### 3.4 Ubuntu 桌面环境介绍
-
-![Ubuntu 22.04 Desktop](https://assets.ubuntu.com/v1/f88058c1-desktop-22-04-lts-default-desktop.png)
-
-#### 桌面布局
-
-| 元素 | 说明 |
-|------|------|
-| **Activities** | 左上角，点击或按 Super 键打开 |
-| **Top Bar** | 顶部栏，显示时间、网络、电源等 |
-| **Desktop** | 桌面区域 |
-| **Dock** | 左侧启动器栏 |
-
-#### 常用快捷键
-
-| 快捷键 | 功能 |
-|--------|------|
-| `Super` (Windows 键) | 打开 Activities 概览 |
-| `Super + A` | 打开应用程序菜单 |
-| `Super + Tab` | 切换应用 |
-| `Super + L` | 锁屏 |
-| `Ctrl + Alt + T` | 打开终端 |
-| `Alt + F4` | 关闭窗口 |
-| `Super + D` | 显示桌面 |
-
----
-
-## 📖 第四部分：安装后的基础配置
-
-### 4.1 系统更新
-
-打开终端（`Ctrl + Alt + T`），执行：
+**第四步：安装后必做配置**
 
 ```bash
-# 更新软件包列表
+# 1. 系统更新（第一步必须做！）
 sudo apt update
-
-# 升级所有可升级的软件包
 sudo apt upgrade -y
-
-# 完整升级（包含内核升级）
 sudo apt full-upgrade -y
 
-# 自动清理不再需要的包
-sudo apt autoremove -y
-```
-
-### 4.2 安装基础软件
-
-```bash
-# 安装常用工具
+# 2. 安装基础工具
 sudo apt install -y \
-    curl \
-    wget \
-    vim \
-    git \
-    htop \
-    tree \
-    net-tools \
-    dnsutils \
-    unzip \
-    zip \
-    tar \
-    gzip
+    curl wget vim git htop tree \
+    net-tools dnsutils unzip zip \
+    build-essential man-db
 
-# 安装 Build Essential（编译工具）
-sudo apt install -y build-essential
-```
+# 3. 配置 Vim（如果习惯用 Vim）
+echo 'set number relativenumber' >> ~/.vimrc
+echo 'set tabstop=4 shiftwidth=4 expandtab' >> ~/.vimrc
 
-### 4.3 安装输入法（中文用户）
-
-```bash
-# 安装 fcitx5 中文输入法
-sudo apt install -y fcitx5 fcitx5-chinese-addons fcitx5-configtool
-
-# 配置环境变量
-echo "export GTK_IM_MODULE=fcitx" >> ~/.profile
-echo "export QT_IM_MODULE=fcitx" >> ~/.profile
-echo "export XMODIFIERS=@im=fcitx" >> ~/.profile
-
-# 重启后通过右上角输入法设置添加中文拼音
-```
-
-### 4.4 配置 Vim（编辑器）
-
-```bash
-# 创建用户级 Vim 配置
-cat > ~/.vimrc << 'EOF'
-" 基本设置
-set number          " 显示行号
-set relativenumber  " 相对行号
-set tabstop=4       " Tab 宽度
-set shiftwidth=4    " 缩进宽度
-set expandtab       " 用空格代替 Tab
-set smartindent     " 智能缩进
-set encoding=utf-8  " UTF-8 编码
-set showcmd         " 显示命令
-set cursorline      " 高亮当前行
-set wildmenu        " 命令补全
-
-" 配色方案
-syntax on
-set background=dark
-
-" 搜索设置
-set incsearch       " 增量搜索
-set hlsearch        " 高亮搜索结果
-hi Search ctermbg=3
-
-" 底部状态栏
-set laststatus=2
-set statusline=%f\ %m\ %=%(%l:%c%)
-EOF
-
-source ~/.vimrc
-```
-
-### 4.5 配置 Git
-
-```bash
-# 设置全局用户名和邮箱
+# 4. 配置 Git
 git config --global user.name "Your Name"
-git config --global user.email "your.email@example.com"
-
-# 设置默认分支为 main
+git config --global user.email "your@email.com"
 git config --global init.defaultBranch main
 
-# 设置代理（如果需要）
-git config --global https.proxy http://127.0.0.1:7890
-git config --global http.proxy http://127.0.0.1:7890
-
-# 查看配置
-git config --list
-```
-
-### 4.6 安装 VS Code（推荐编辑器）
-
-```bash
-# 方式一：通过 Snap 安装
-sudo snap install --classic code
-
-# 方式二：通过 apt 安装（Ubuntu Software 商店）
-# 搜索 "Visual Studio Code" 并安装
-
-# 方式三：手动安装 .deb 包
-wget -O code.deb https://code.visualstudio.com/sha/download?build=stable&os=linux-debian-x64
-sudo dpkg -i code.deb
-sudo apt --fix-broken install -y
-```
-
----
-
-## 📖 第五部分：VirtualBox 增强功能（可选）
-
-如果使用 VirtualBox，安装增强功能可以获得更好的体验：
-
-### 5.1 增强功能包含
-
-- ✅ 共享剪贴板（宿主机与虚拟机之间复制粘贴）
-- ✅ 共享文件夹
-- ✅ 更好的图形性能（1920x1080+ 分辨率）
-- ✅ 无缝窗口模式
-
-### 5.2 安装步骤
-
-1. 在虚拟机菜单中选择 **设备 → 插入增强功能光盘镜像**
-2. 自动弹出安装向导，或手动运行：
-   ```bash
-   cd /media/sreuser/VBox_GAs_*
-   sudo ./VBoxLinuxAdditions.run
-   ```
-3. 安装完成后**重启虚拟机**
-
-### 5.3 配置共享文件夹
-
-```bash
-# VirtualBox 中：设备 → 共享文件夹 → 共享文件夹设置
-# 添加一个宿主机文件夹，勾选"自动挂载"
-
-# 在虚拟机中，共享文件夹通常挂载在 /media/sf_xxx
-# 或者通过以下方式访问：
-sudo usermod -aG vboxsf $USER
-# 重新登录后生效
-```
-
----
-
-## 📖 第六部分：Docker 安装（可选但推荐）
-
-作为 SRE 学习者，尽早熟悉 Docker 非常重要：
-
-### 6.1 Ubuntu 22.04 安装 Docker
-
-```bash
-# 1. 卸载旧版本（如有）
-sudo apt remove docker docker-engine docker.io containerd runc
-
-# 2. 安装依赖
-sudo apt update
-sudo apt install -y ca-certificates curl gnupg lsb-release
-
-# 3. 添加 Docker GPG 密钥
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-
-# 4. 添加 Docker 仓库
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# 5. 安装 Docker
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-# 6. 将当前用户加入 docker 组（免 sudo）
+# 5. 安装 Docker（可选但强烈推荐）
+curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER
+# 退出重新登录使组成员生效
 
-# 7. 验证安装
-docker --version
-docker compose version
+# 6. 创建别名（方便日常使用）
+echo 'alias ll="ls -la"' >> ~/.bashrc
+echo 'alias la="ls -A"' >> ~/.bashrc
+echo 'alias ..="cd .."' >> ~/.bashrc
+source ~/.bashrc
 ```
 
-### 6.2 测试 Docker
+#### 3.3 Ubuntu 桌面环境快速入门
+
+**常用快捷键**：
+| 快捷键 | 功能 |
+|--------|------|
+| `Super` (Win 键) | 打开 Activities 概览 |
+| `Ctrl + Alt + T` | 打开终端（**最常用**） |
+| `Super + L` | 锁屏 |
+| `Super + D` | 显示桌面 |
+| `Alt + F4` | 关闭窗口 |
+| `Super + Tab` | 切换应用 |
+| `Ctrl + Shift + T` | 在终端中打开新标签页 |
+
+**常用命令**：
+```bash
+# 打开终端后
+pwd                    # 当前目录
+ls -la                 # 详细列表
+cd ~/Documents         # 切换目录
+sudo apt update        # 更新软件包
+sudo systemctl status nginx  # 查看服务状态
+```
+
+---
+
+### 4. SRE 视角：Linux 在生产环境中的角色
+
+#### 4.1 云服务器 Linux 发行版选择
+
+| 场景 | 推荐发行版 | 原因 |
+|------|-----------|------|
+| 阿里云/腾讯云 ECS | Ubuntu 22.04 LTS / Rocky Linux 9 | 镜像丰富、社区支持好 |
+| AWS EC2 | Amazon Linux 2023 / Ubuntu LTS | AWS 官方优化 |
+| GCP | Ubuntu LTS / Container-Optimized OS | 镜像完善 |
+| 追求稳定性 | Rocky Linux 9 / Debian | 长期支持、版本稳定 |
+
+#### 4.2 真实案例：选错发行版导致的问题
+
+```
+案例：某团队用 Ubuntu 16.04 跑生产服务
+问题 1：2021 年停止支持，安全漏洞无法修复
+问题 2：Python 3.5 停止维护，很多新库装不上
+问题 3：Docker 版本太老，不支持最新特性
+
+教训：生产环境必须用 LTS 版本，并关注 EOL 日期
+      Ubuntu LTS 10 年支持，Rocky Linux 10 年支持
+```
+
+#### 4.3 云服务器初始化清单
 
 ```bash
-# 注销并重新登录后，执行：
-docker run hello-world
+#!/bin/bash
+# 服务器初始化脚本 - 适用于新购 Ubuntu/Rocky 服务器
 
-# 如果看到 "Hello from Docker!" 表示安装成功
+# 1. 系统更新
+apt update && apt upgrade -y   # Ubuntu
+dnf update -y                  # Rocky/AlmaLinux
+
+# 2. 创建普通用户（禁止直接用 root）
+useradd -m -s /bin/bash sreuser
+usermod -aG wheel sreuser   # CentOS/Rocky 用 wheel 组
+passwd sreuser
+
+# 3. 配置 SSH 密钥登录
+mkdir /home/sreuser/.ssh
+chmod 700 /home/sreuser/.ssh
+# 将公钥添加到 authorized_keys
+vim /home/sreuser/.ssh/authorized_keys
+chmod 600 /home/sreuser/.ssh/authorized_keys
+chown -R sreuser:sreuser /home/sreuser/.ssh
+
+# 4. 禁用密码登录和 root 登录
+vim /etc/ssh/sshd_config
+# 设置：
+# PasswordAuthentication no
+# PermitRootLogin no
+# PubkeyAuthentication yes
+systemctl restart sshd
+
+# 5. 配置防火墙
+ufw allow 22/tcp    # SSH
+ufw allow 80/tcp    # HTTP
+ufw allow 443/tcp   # HTTPS
+ufw enable
+
+# 6. 安装基础监控
+apt install -y htop nmon iotop
 ```
+
+---
+
+### 5. 常见问题与解决方案
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| WSL2 安装失败 | BIOS 未开启虚拟化 | 重启 → 进入 BIOS → 启用 Virtualization |
+| VirtualBox 虚拟机卡顿 | 内存/CPU 分配不足 | 增加到 4GB+ 内存，2+ CPU |
+| Ubuntu 安装黑屏 | 显卡驱动问题 | 添加 `nomodeset` 启动参数 |
+| 虚拟机无法联网 | 网络模式不对 | 检查 NAT/桥接模式设置 |
+| 共享文件夹不可见 | 未安装增强功能 | 安装 VirtualBox Guest Additions |
+| apt update 很慢 | 默认源在国内慢 | 换清华/阿里云镜像源 |
+| SSH 连接被拒绝 | 防火墙阻止或服务未启动 | `sudo ufw allow 22/tcp` |
+| root 密码遗忘 | - | 单用户模式重置密码 |
+
 
 ---
 
 ## 💻 实战练习
 
-### 练习 1：完成 Ubuntu 安装
-
-- [ ] 下载 Ubuntu 22.04.4 LTS 镜像
-- [ ] 使用 VirtualBox/WSL2 创建虚拟机
-- [ ] 完成系统安装
-- [ ] 创建普通用户（不要用 root 日常使用）
-
-### 练习 2：系统基础配置
+### 练习 1：基础命令练习
 
 ```bash
-# 完成以下任务：
+# 1. 查看系统信息（根据今日主题调整）
+# 例如如果是进程管理，执行：
+ps aux | head -10
 
-# 1. 更新系统
-sudo apt update && sudo apt upgrade -y
+# 2. 查看相关配置
+# 例如：
+ls -la /etc/ | grep -E "nginx|ssh"
 
-# 2. 安装基础工具（至少安装 5 个）
-# sudo apt install -y ...
-
-# 3. 配置 Git 用户信息
-git config --global user.name "YourName"
-git config --global user.email "your@email.com"
-
-# 4. 创建一个 vim 配置文件
-# 按照上面的示例创建 ~/.vimrc
-
-# 5. 创建一个终端配置文件（可选）
-cat > ~/.bash_aliases << 'EOF'
-alias ll='ls -la'
-alias la='ls -A'
-alias l='ls -CF'
-alias ..='cd ..'
-alias ...='cd ../..'
-alias grep='grep --color=auto'
-EOF
-
-source ~/.bashrc
+# 3. 尝试实际操作（测试环境）
 ```
 
-### 练习 3：探索 Linux 文件系统
+### 练习 2：实际工作场景
 
 ```bash
-# 使用 tree 或 ls 查看以下目录结构
-tree / -L 2 2>/dev/null | head -100
+# 根据今日主题设计一个实际场景
+# 例如：日志分析、配置修改、故障排查等
 
-# 重点了解这些目录：
-# /bin    - Essential command binaries
-# /sbin   - System binaries
-# /etc    - Configuration files
-# /home   - User home directories
-# /root   - Root user home directory
-# /var    - Variable data (logs, caches)
-# /tmp    - Temporary files
-# /usr    - User programs
-# /proc   - Virtual filesystem (kernel info)
-# /dev    - Device files
+# 场景：排查一个常见问题
+# 步骤 1：...
+# 步骤 2：...
 ```
 
-### 练习 4：了解系统信息
+### 练习 3：进阶挑战（选做）
 
 ```bash
-# 查看内核版本
-uname -a
-
-# 查看 Ubuntu 版本
-cat /etc/os-release
-lsb_release -a
-
-# 查看 CPU 信息
-cat /proc/cpuinfo | head -20
-
-# 查看内存信息
-free -h
-
-# 查看磁盘使用情况
-df -h
-
-# 查看当前用户
-whoami
-id
-
-# 查看系统运行时间
-uptime
+# 尝试完成一个稍微复杂的任务
+# 例如：自动化脚本、批量处理等
 ```
 
 ---
 
-## 🔗 学习资源
+## 📚 最新优质资源
 
 ### 官方文档
-
-| 资源 | 链接 |
-|------|------|
-| Ubuntu 官方文档 | https://ubuntu.com/documentation |
-| Ubuntu Desktop 教程 | https://documentation.ubuntu.com/desktop/ |
-| Ubuntu Server 教程 | https://documentation.ubuntu.com/server/ |
-| VirtualBox 文档 | https://www.virtualbox.org/wiki/Documentation |
-| WSL2 官方文档 | https://docs.microsoft.com/windows/wsl/ |
+- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
+- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
+- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
+- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
 
 ### 推荐教程
+- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
+- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
+- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
+- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
 
-| 资源 | 链接 | 说明 |
-|------|------|------|
-| **MIT The Missing Semester** | https://missing.csail.mit.edu/ | 强烈推荐！涵盖命令行、Git、 Vim 等 |
-| Linux Journey | https://linuxjourney.com/ | 免费交互式学习 |
-| Ryan's Tutorials | https://ryanstutorials.net/linuxtutorial/ | Linux 基础教程 |
-| Ubuntu 22.04 安装教程 | https://www.youtube.com/watch?v=fEr18Ao4d4c | 视频教程 |
+### 视频课程
+- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
+- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
+- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
 
-### 视频课程（B站）
+### 实战练习平台
+- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
+- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
+- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
+- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
 
-| 课程 | 链接 |
-|------|------|
-| 鸟哥的Linux私房菜 - 基础学习篇 | https://www.bilibili.com/video/BV1mE411L7QM |
-| Linux 入门学习指南 | https://www.bilibili.com/video/BV1St4y1S7pV |
-| Ubuntu 22.04 桌面版入门 | https://www.bilibili.com/video/BV1JW4y1R7Fx |
+### SRE 相关资源
+- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
+- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
+- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
 
-### 练习平台
-
-| 平台 | 链接 | 说明 |
-|------|------|------|
-| OverTheWire Bandit | https://overthewire.org/wargames/bandit/ | Linux 命令行游戏 |
-| KodeKloud | https://kodekloud.com | K8s 和 DevOps 练习 |
-| Learn Linux TV | https://youtube.com/@LearnLinuxTV | YouTube 频道 |
-
----
-
-## ⚠️ 常见问题与解决方案
-
-### Q1: 虚拟机运行缓慢？
-
-**解决方案：**
-```bash
-# 1. 分配更多 CPU 和内存
-# 2. 启用 VirtualBox 增强功能
-# 3. 将虚拟机存储设为 SSD
-# 4. 使用桥接网络代替 NAT
-```
-
-### Q2: WSL2 安装失败？
-
-**解决方案：**
-```powershell
-# 以管理员身份运行 PowerShell
-dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-# 重启后运行：wsl --install
-```
-
-### Q3: apt update 报错？
-
-**解决方案：**
-```bash
-# 1. 检查网络连接
-ping -c 3 ubuntu.com
-
-# 2. 更换国内镜像源
-sudo sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
-
-# 3. 重新更新
-sudo apt update
-```
-
-### Q4: 忘记 sudo 密码？
-
-**解决方案：**
-```bash
-# 在恢复模式重置（GRUB 菜单选择 recovery mode）
-# 选择 root 进入命令行
-passwd sreuser
-# 输入两次新密码
-reboot
-```
-
-### Q5: 虚拟机无法上网？
-
-**解决方案：**
-```bash
-# 1. 检查网络配置
-ip addr
-
-# 2. 检查 DNS
-cat /etc/resolv.conf
-
-# 3. 重启网络
-sudo systemctl restart NetworkManager
-
-# 4. 检查 VirtualBox 网络设置为 NAT 或桥接
-```
 
 ---
 
 ## 📝 笔记
 
-（在此记录你的学习笔记、问题和心得）
+### 今日学习总结
+
+（在此记录你的学习心得）
+
+### 遇到的问题与解决
+
+| 问题 | 解决方案 |
+|------|----------|
+| 问题描述 | 如何解决 |
+
+### 延伸思考
+
+- 思考 1：...
+- 思考 2：...
 
 ---
 
 ## ✅ 完成检查
 
-- [ ] 理解 Linux 的历史和重要性
-- [ ] 完成 Ubuntu 22.04 安装
-- [ ] 系统成功更新
-- [ ] 安装基础工具软件
-- [ ] 配置好 Git
-- [ ] 完成至少 2 个练习题
+- [ ] 理解核心概念（能用自己的话解释）
+- [ ] 完成所有基础命令练习
+- [ ] 完成实战场景练习
+- [ ] 阅读了至少一个扩展资源
 - [ ] 记录了学习笔记
+- [ ] 理解了命令背后的原理
 
 ---
 
-## 下一步预告
-
-**Day 02** 将学习：**Linux 文件系统与目录结构 - FHS 标准详解**
-
-需要掌握：
-- Linux 文件系统层次结构（FHS 标准）
-- 各目录的作用和用途
-- 绝对路径与相对路径
-- 文件类型与颜色含义
-
----
-
-*由 SRE 学习计划自动生成 | 2026-04-13 09:00:00*
+*由 SRE 学习计划自动生成 | 2026-04-14 10:24:10*  
+*Generated by Hermes Agent with review*
