@@ -486,6 +486,148 @@ def generate_topic_content(day: int, topic: str) -> str:
     else:
         return generate_default_content(day, topic)
 
+def generate_process_content(day: int, topic: str) -> str:
+    """进程管理基础内容生成器"""
+    return f"""### 1. 学习主题概述
+
+{topic}
+
+#### 1.1 什么是进程
+
+进程（Process）是运行中的程序，是操作系统进行资源分配和调度的基本单位。每个进程都有独立的内存空间、文件描述符和进程ID（PID）。
+
+#### 1.2 进程的状态
+
+| 状态 | 含义 |
+|------|------|
+| R (Running) | 正在运行或就绪运行 |
+| S (Sleeping) | 可中断的睡眠状态 |
+| D (Disk Sleep) | 不可中断的睡眠状态 |
+| T (Stopped) | 停止状态 |
+| Z (Zombie) | 僵尸进程 |
+
+---
+
+### 2. 进程管理命令
+
+#### 2.1 查看进程
+
+```bash
+# 查看所有进程（完整格式）
+ps aux
+
+# 查看进程树
+ps -ef --forest
+
+# 实时显示进程（类似任务管理器）
+top
+htop
+
+# 查看特定进程
+ps aux | grep nginx
+pgrep -f nginx
+```
+
+#### 2.2 进程状态与信号
+
+| 信号 | 编号 | 含义 |
+|------|------|------|
+| SIGTERM | 15 | 请求终止（优雅退出） |
+| SIGKILL | 9 | 强制终止 |
+| SIGSTOP | 19 | 暂停进程 |
+| SIGCONT | 18 | 继续运行 |
+
+```bash
+# 发送信号
+kill -15 <PID>    # 优雅终止
+kill -9 <PID>     # 强制终止
+kill -STOP <PID>  # 暂停进程
+kill -CONT <PID>  # 继续运行
+
+# 批量操作
+killall nginx       # 按名称终止
+pkill -f nginx      # 按名称终止（支持正则）
+```
+
+#### 2.3 进程优先级
+
+```bash
+# 查看优先级
+ps -eo pid,ni,cmd
+
+# 启动低优先级进程
+nice -n 10 ./script.sh
+
+# 调整运行中进程优先级
+renice -n 5 -p <PID>
+```
+
+---
+
+### 3. 实战练习
+
+#### 练习 1：基础进程查看
+
+```bash
+# 1. 列出当前用户的所有进程
+ps -u $USER
+
+# 2. 按CPU使用率排序
+ps aux --sort=-%cpu
+
+# 3. 查看进程的父子关系
+ps -ef | head -20
+```
+
+#### 练习 2：进程控制
+
+```bash
+# 1. 启动一个后台进程
+sleep 300 &
+
+# 2. 查看后台任务
+jobs -l
+
+# 3. 将后台任务调到前台
+fg %1
+
+# 4. 暂停当前任务，按Ctrl+Z
+```
+
+#### 练习 3：进程监控
+
+```bash
+# 1. 实时监控进程，按内存排序
+top -o %MEM
+
+# 2. 查看某个用户的进程统计
+ps -U www-data -o pid,vsz,rss,pcpu,pmem,comm
+
+# 3. 计算进程数
+ps aux | wc -l
+```
+
+---
+
+### 4. 常见问题
+
+| 问题 | 解决方案 |
+|------|----------|
+| 进程僵死无法终止 | 使用 `kill -9`，检查父进程是否未wait |
+| 僵尸进程过多 | 找到父进程并修复或终止父进程 |
+| CPU 100% | 使用 `top` 定位高CPU进程，分析代码 |
+| 进程意外退出 | 检查 dmesg 日志、OOM Killer |
+
+---
+
+### 5. 扩展阅读
+
+- `man ps`、`man top`、`man kill` — 命令手册
+- `/proc/<PID>/` — 进程详细信息目录
+- `pstree` — 进程树形视图
+- 进程组与会话：`ps -o pid,pgid,sid,comm`
+"""
+
 def generate_fhs_content(day: int, topic: str) -> str:
     """生成 FHS 文件系统详细学习内容"""
     return """### 1. Linux 文件系统概述
