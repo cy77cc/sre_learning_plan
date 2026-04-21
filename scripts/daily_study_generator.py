@@ -60,21 +60,28 @@ def get_topic_from_overview(day: int) -> str:
     
     content = OVERVIEW_PATH.read_text()
     
-    # 匹配 Day N 或 Day NN 格式
-    # 优先匹配 Day N: xxx 或 ### Day N
-    patterns = [
-        rf'### Day\s+{day}\s*\n.*?\*\*学习内容\*\*[：:]\s*([^\n]+)',
-        rf'### Day\s+{day}\s*-+\s*\n.*?-\s+\*\*学习内容\*\*[：:]\s*([^\n]+)',
-        rf'-\s+\[?\s*\*?Day\s+{day}\s*\]?\s*-+\s*\n.*?-\s+\*\*学习内容\*\*[：:]\s*([^\n]+)',
-    ]
+    # 先提取当前 Day 的整块内容（到下一个 ### Day 或 ## 为止）
+    # 这样可以避免 .*? 跨越到下一个 Day
+    block_pattern = rf'(?:^|\n)### Day\s+{day}\s*\n(.*?)(?=^### Day|^## |\Z)'
+    block_match = re.search(block_pattern, content, re.DOTALL | re.MULTILINE)
+    if not block_match:
+        return None
     
-    for pattern in patterns:
-        match = re.search(pattern, content, re.DOTALL)
-        if match:
-            topic = match.group(1).strip()
-            # 清理 markdown 格式
-            topic = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', topic)
-            topic = topic.replace('**', '').replace('*', '')
+    block = block_match.group(1)
+    
+    # 在当前 Day 块内查找学习内容，支持复习与实战、学习内容等多种格式
+    # 匹配格式：**标签**：内容，捕获标签和内容拼接成完整主题
+    label_pattern = re.compile(r'\*\*([^*]+)\*\*[：:]\s*([^\n-][^\n]*)', re.MULTILINE)
+    
+    for m in label_pattern.finditer(block):
+        label = m.group(1).strip()
+        content = m.group(2).strip()
+        # 清理 markdown 格式（如 [链接文字](url)）
+        content = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', content)
+        content = content.replace('**', '').replace('*', '').strip()
+        if content:
+            # 拼接成 "标签：内容" 格式，如 "复习与实战：综合练习"
+            topic = f"{label}：{content}"
             return topic
     
     return None
