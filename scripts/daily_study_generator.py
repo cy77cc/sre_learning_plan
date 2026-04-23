@@ -477,19 +477,19 @@ def generate_topic_content(day: int, topic: str) -> str:
     elif 'systemd' in topic_lower or '服务' in topic:
         return generate_systemd_content(day, topic)
     elif '监控' in topic or 'uptime' in topic_lower or 'free' in topic_lower:
-        return generate_monitoring_content(day, topic)
+        return generate_default_content(day, topic)
     elif '磁盘' in topic or 'fdisk' in topic_lower or 'mkfs' in topic_lower:
-        return generate_disk_content(day, topic)
+        return generate_default_content(day, topic)
     elif '日志' in topic or 'journalctl' in topic_lower:
-        return generate_log_content(day, topic)
+        return generate_default_content(day, topic)
     elif 'shell脚本' in topic_lower or 'shell' in topic_lower:
-        return generate_shell_content(day, topic)
+        return generate_default_content(day, topic)
     elif '循环' in topic or 'for' in topic_lower or 'while' in topic_lower:
-        return generate_loop_content(day, topic)
+        return generate_default_content(day, topic)
     elif '函数' in topic or 'def' in topic_lower:
-        return generate_function_content(day, topic)
+        return generate_default_content(day, topic)
     elif '复习' in topic or '综合' in topic:
-        return generate_review_content(day, topic)
+        return generate_default_content(day, topic)
     else:
         return generate_default_content(day, topic)
 
