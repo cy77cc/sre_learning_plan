@@ -69,19 +69,20 @@ def get_topic_from_overview(day: int) -> str:
     
     block = block_match.group(1)
     
-    # 在当前 Day 块内查找学习内容，支持复习与实战、学习内容等多种格式
-    # 匹配格式：**标签**：内容，捕获标签和内容拼接成完整主题
+    # 在当前 Day 块内查找 **学习内容** 标签
     label_pattern = re.compile(r'\*\*([^*]+)\*\*[：:]\s*([^\n-][^\n]*)', re.MULTILINE)
     
     for m in label_pattern.finditer(block):
         label = m.group(1).strip()
-        content = m.group(2).strip()
-        # 清理 markdown 格式（如 [链接文字](url)）
-        content = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', content)
-        content = content.replace('**', '').replace('*', '').strip()
-        if content:
-            # 拼接成 "标签：内容" 格式，如 "复习与实战：综合练习"
-            topic = f"{label}：{content}"
+        text = m.group(2).strip()
+        # 清理 markdown 格式
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        text = text.replace('**', '').replace('*', '').strip()
+        if text:
+            # 清理 "学习内容：" 前缀（如果标签本身就是"学习内容"）
+            if label == '学习内容':
+                return text
+            topic = f"{label}：{text}"
             return topic
     
     return None
