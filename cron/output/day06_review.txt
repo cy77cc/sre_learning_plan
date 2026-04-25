@@ -1,7 +1,7 @@
 SRE 学习文档 Review 报告
 ========================
-日期：2026-04-18 09:37:46
-Day 6: 用户与用户组管理
+日期：2026-04-25 10:58:13
+Day 6: 用户与用户组管理 — useradd/usermod/userdel/sudo
 
 文档路径：/root/sre_learning/docs/day06/README.md
 
