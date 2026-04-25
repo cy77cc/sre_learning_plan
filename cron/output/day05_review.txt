@@ -1,7 +1,7 @@
 SRE 学习文档 Review 报告
 ========================
-日期：2026-04-17 09:01:39
-Day 5: 文件权限与所有权
+日期：2026-04-25 10:58:13
+Day 5: 文件权限管理 — chmod/chown/chgrp 与数字权限
 
 文档路径：/root/sre_learning/docs/day05/README.md
 
