@@ -1,7 +1,7 @@
 SRE 学习文档 Review 报告
 ========================
-日期：2026-04-20 12:35:54
-Day 8: 进程管理基础
+日期：2026-04-25 10:58:13
+Day 8: 进程管理基础 — ps/top/htop/pstree
 
 文档路径：/root/sre_learning/docs/day08/README.md
 
