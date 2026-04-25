@@ -2719,7 +2719,7 @@ def generate_default_content(day: int, topic: str) -> str:
         'osi': generate_network_osi_content,
         'tcp': generate_network_tcp_content,
         'udp': generate_network_basic_content,
-        'ip': generate_network_ip_content,
+        'ip': generate_network_basic_content,
         'dns': generate_network_dns_content,
         'ping': generate_network_basic_content,
         'tcpdump': generate_network_basic_content,
