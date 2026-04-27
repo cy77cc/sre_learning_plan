@@ -22,7 +22,7 @@ from typing import Dict, List, Tuple, Optional
 BASE_DIR = Path("/root/sre_learning")
 DOCS_DIR = BASE_DIR / "docs"
 OVERVIEW_PATH = DOCS_DIR / "00-overview.md"
-START_DATE = date(2026, 4, 13)
+START_DATE = date(2026, 3, 18)
 GIT_EMAIL = "hermes@sre-learning.local"
 GIT_NAME = "Hermes Agent"
 OUTPUT_DIR = Path("/root/sre_learning/cron/output")
