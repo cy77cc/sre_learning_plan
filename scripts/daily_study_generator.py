@@ -4231,7 +4231,7 @@ mtr example.com                 # 综合诊断
 
 def generate_python_basic_content(day, topic):
     """Python basic content"""
-    return """### Day {day}: {topic}
+    return f"""### 1. {topic}
 
 #### 1. 基础知识
 
@@ -4271,7 +4271,7 @@ print(f"Server: {config['host']}:{config['port']}")
 
 def generate_docker_basic_content(day, topic):
     """Docker basic content"""
-    return """### Day {day}: {topic}
+    return f"""### 1. {topic}
 
 #### 1. 基础知识
 
@@ -4313,7 +4313,7 @@ CMD ["python", "app.py"]
 
 def generate_cloud_basic_content(day, topic):
     """Cloud/AWS basic content"""
-    return """### Day {day}: {topic}
+    return f"""### 1. {topic}
 
 #### 1. 基础知识
 
@@ -4349,7 +4349,7 @@ aws s3 cp local.txt s3://my-bucket/
 
 def generate_iac_basic_content(day, topic):
     """IaC basic content"""
-    return """### Day {day}: {topic}
+    return f"""### 1. {topic}
 
 #### 1. 基础知识
 
@@ -4403,7 +4403,7 @@ ansible-playbook deploy.yml
 
 def generate_observability_basic_content(day, topic):
     """Observability basic content"""
-    return """### Day {day}: {topic}
+    return f"""### 1. {topic}
 
 #### 1. 基础知识
 
@@ -4444,7 +4444,7 @@ histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))
 
 def generate_cicd_basic_content(day, topic):
     """CI/CD basic content"""
-    return """### Day {day}: {topic}
+    return f"""### 1. {topic}
 
 #### 1. 基础知识
 
@@ -4485,7 +4485,7 @@ jobs:
 
 def generate_sre_practice_content(day, topic):
     """SRE practice content"""
-    return """### Day {day}: {topic}
+    return f"""### 1. {topic}
 
 #### 1. 基础知识
 
