@@ -4349,7 +4349,7 @@ aws s3 cp local.txt s3://my-bucket/
 
 def generate_iac_basic_content(day, topic):
     """IaC basic content"""
-    return f"""### 1. {topic}
+    return "### 1. " + topic + """
 
 #### 1. 基础知识
 
@@ -4403,7 +4403,7 @@ ansible-playbook deploy.yml
 
 def generate_observability_basic_content(day, topic):
     """Observability basic content"""
-    return f"""### 1. {topic}
+    return "### 1. " + topic + """
 
 #### 1. 基础知识
 
