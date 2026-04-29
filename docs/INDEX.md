@@ -1,6 +1,6 @@
 # 📚 学习文档目录
 
-> 总计 194 天 / 26 周学习计划 | 已完成 **32/194** 篇文档
+> 总计 194 天 / 26 周学习计划 | 已完成 **43/194** 篇文档
 
 ---
 
@@ -43,17 +43,17 @@
 
 | 天数 | 状态 | 学习主题 | 文档链接 |
 |------|------|---------|---------|
-| Day 29 | ⏳ | OSI 七层模型与 TCP/IP 协议栈 | 待生成 |
-| Day 30 | ⏳ | TCP 协议详解 — 三次握手、四次挥手、状态机 | 待生成 |
-| Day 31 | ⏳ | UDP 协议、QUIC（HTTP/3） | 待生成 |
-| Day 32 | ⏳ | IP 协议 — 地址分类、子网掩码、CIDR、NAT | 待生成 |
-| Day 33 | ⏳ | 路由基础 — 路由表、默认网关、静态路由 | 待生成 |
-| Day 34 | ⏳ | DNS 协议 — 记录类型、解析链、TTL、DNS 安全 | 待生成 |
-| Day 35 | ⏳ | 从 URL 到页面的完整过程 | 待生成 |
-| Day 36 | ⏳ | ping/traceroute/mtr/dig | 待生成 |
-| Day 37 | ⏳ | nc/curl/wget 进阶 | 待生成 |
-| Day 38 | ⏳ | tcpdump 抓包分析 | 待生成 |
-| Day 39 | ⏳ | iptables/nftables 防火墙 + 云安全组 | 待生成 |
+| Day 29 | ✅ | OSI 七层模型与 TCP/IP 协议栈 | [📄 查看](day29-OSI七层模型与TCP与IP协议栈.md) |
+| Day 30 | ✅ | TCP 协议详解 — 三次握手、四次挥手、状态机 | [📄 查看](day30-TCP协议详解-三次握手与四次挥手与状态机.md) |
+| Day 31 | ✅ | UDP 协议、QUIC（HTTP/3） | [📄 查看](day31-UDP协议与QUIC-HTTP3.md) |
+| Day 32 | ✅ | IP 协议 — 地址分类、子网掩码、CIDR、NAT | [📄 查看](day32-IP协议-地址分类与子网掩码与CIDR与NAT.md) |
+| Day 33 | ✅ | 路由基础 — 路由表、默认网关、静态路由 | [📄 查看](day33-路由基础-路由表与默认网关与静态路由.md) |
+| Day 34 | ✅ | DNS 协议 — 记录类型、解析链、TTL、DNS 安全 | [📄 查看](day34-DNS协议-记录类型与解析链与TTL与DNS安全.md) |
+| Day 35 | ✅ | 从 URL 到页面的完整过程 | [📄 查看](day35-从URL到页面的完整过程.md) |
+| Day 36 | ✅ | ping/traceroute/mtr/dig | [📄 查看](day36-ping与traceroute与mtr与dig.md) |
+| Day 37 | ✅ | nc/curl/wget 进阶 | [📄 查看](day37-nc与curl与wget进阶.md) |
+| Day 38 | ✅ | tcpdump 抓包分析 | [📄 查看](day38-tcpdump抓包分析.md) |
+| Day 39 | ✅ | iptables/nftables 防火墙 + 云安全组 | [📄 查看](day39-iptables与nftables防火墙与云安全组.md) |
 | Day 40 | ✅ | HTTP/HTTPS 协议深入 | [📄 查看](day40-HTTP与HTTPS协议深入.md) |
 | Day 41 | ✅ | Socket 编程与 Nginx/HAProxy 负载均衡 | [📄 查看](day41-Socket编程与Nginx与HAProxy负载均衡.md) |
 | Day 42 | ✅ | 网络基础综合评估 | [📄 查看](day42-网络基础综合评估.md) |
@@ -305,4 +305,4 @@
 
 ---
 
-*最后更新：由 Hermes Agent 自动生成（2026-04-29 v2.0）*
+*最后更新：2026-04-29*
