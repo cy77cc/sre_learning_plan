@@ -660,4 +660,19 @@ tshark -r capture.pcap -Y "dns.qry.name" -T fields -e dns.qry.name | sort | uniq
 
 ---
 
+## ✅ 完成检查
+
+- [ ] 理解 tcpdump 的基本用法和常用选项
+- [ ] 掌握 BPF 过滤语法（host/port/net/proto + 逻辑运算符）
+- [ ] 能够使用 tcpdump 抓取特定协议和端口的流量
+- [ ] 了解 Wireshark 的基本功能和显示过滤器
+- [ ] 完成 HTTP 流量抓取和分析练习
+- [ ] 完成 DNS 查询抓取和分析练习
+- [ ] 理解 TCP 重传的含义和排查方法
+- [ ] 掌握生产环境抓包的最佳实践（限数量/过滤/ring buffer）
+- [ ] 阅读了至少一个扩展资源
+- [ ] 记录了学习笔记
+
+---
+
 > 💡 **SRE 心法**：「网络问题的答案都在数据包里。」学会看包，你就掌握了解决一半网络问题的能力。
