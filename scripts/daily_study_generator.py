@@ -4252,7 +4252,7 @@ import json
 with open('config.json') as f:
     config = json.load(f)
 
-print(f"Server: {config['host']}:{config['port']}")
+print(f"Server: {{config['host']}}:{{config['port']}}")
 ```
 
 #### 3. SRE 实战
