@@ -8,34 +8,34 @@
 
 | 天数 | 状态 | 学习主题 | 文档链接 |
 |------|------|---------|---------|
-| Day 01 | ✅ | Linux 简介与虚拟机安装 | [📄 查看](day01/README.md) |
-| Day 02 | ✅ | 文件系统与目录结构 — FHS 标准详解 | [📄 查看](day02/README.md) |
-| Day 03 | ✅ | 文件操作命令 — cp/mv/rm/touch/mkdir/find | [📄 查看](day03/README.md) |
-| Day 04 | ✅ | 文本处理三剑客 — grep/sed/awk 与正则表达式 | [📄 查看](day04/README.md) |
-| Day 05 | ✅ | 文件权限管理 — chmod/chown/chgrp 与数字权限 | [📄 查看](day05/README.md) |
-| Day 06 | ✅ | 用户与用户组管理 — useradd/usermod/userdel/sudo | [📄 查看](day06/README.md) |
-| Day 07 | ✅ | 复习与实战 | [📄 查看](day07/README.md) |
-| Day 08 | ✅ | 进程管理基础 — ps/top/htop/pstree | [📄 查看](day08/README.md) |
-| Day 09 | ✅ | 进程控制 — kill/killall/pkill/信号机制 | [📄 查看](day09/README.md) |
-| Day 10 | ✅ | systemd 服务管理 — systemctl/单元文件 | [📄 查看](day10/README.md) |
-| Day 11 | ✅ | 系统监控命令 — uptime/free/df/vmstat/sar/iostat | [📄 查看](day11/README.md) |
-| Day 12 | ✅ | 磁盘管理 — fdisk/mkfs/mount/LVM | [📄 查看](day12/README.md) |
-| Day 13 | ✅ | 日志管理 — journalctl/rsyslog/logrotate/日志分析 | [📄 查看](day13/README.md) |
-| Day 14 | ✅ | 复习与实战 | [📄 查看](day14/README.md) |
-| Day 15 | ✅ | Shell 脚本基础 — 变量/环境变量/引号/#! 解释器 | [📄 查看](day15/README.md) |
-| Day 16 | ✅ | Shell 条件判断 — if/elif/else/test 运算符 | [📄 查看](day16/README.md) |
-| Day 17 | ✅ | Shell 循环结构 — for/while/until | [📄 查看](day17/README.md) |
-| Day 18 | ✅ | Shell 函数 — 函数定义/参数传递/返回值/作用域 | [📄 查看](day18/README.md) |
-| Day 19 | ✅ | Case 语句与 select 菜单 | [📄 查看](day19/README.md) |
-| Day 20 | ✅ | 数组操作 — 索引数组/关联数组/数组遍历 | [📄 查看](day20/README.md) |
-| Day 21 | ✅ | 字符串处理与正则 — sed/awk 进阶 | [📄 查看](day21/README.md) |
-| Day 22 | ✅ | 脚本调试与信号处理 — set/trap/debug | [📄 查看](day22/README.md) |
-| Day 23 | ✅ | expect 自动化交互 — SSH 自动登录/批量配置 | [📄 查看](day23/README.md) |
-| Day 24 | ✅ | 实战项目 | [📄 查看](day24/README.md) |
-| Day 25 | ✅ | 实战项目 | [📄 查看](day25/README.md) |
-| Day 26 | ✅ | 实战项目 | [📄 查看](day26/README.md) |
-| Day 27 | ✅ | Bash 脚本编程进阶 — 高级技巧 | [📄 查看](day27/README.md) |
-| Day 28 | ✅ | 阶段总结与测试 | [📄 查看](day28/README.md) |
+| Day 01 | ✅ | Linux 简介与虚拟机安装 | [📄 查看](day01-Linux简介与虚拟机安装.md) |
+| Day 02 | ✅ | 文件系统与目录结构 — FHS 标准详解 | [📄 查看](day02-文件系统与目录结构-FHS标准详解.md) |
+| Day 03 | ✅ | 文件操作命令 — cp/mv/rm/touch/mkdir/find | [📄 查看](day03-文件操作命令-cp与mv与rm与touch与mkdir与find.md) |
+| Day 04 | ✅ | 文本处理三剑客 — grep/sed/awk 与正则表达式 | [📄 查看](day04-文本处理三剑客-grep与sed与awk与正则表达式.md) |
+| Day 05 | ✅ | 文件权限管理 — chmod/chown/chgrp 与数字权限 | [📄 查看](day05-文件权限管理-chmod与chown与chgrp与数字权限.md) |
+| Day 06 | ✅ | 用户与用户组管理 — useradd/usermod/userdel/sudo | [📄 查看](day06-用户与用户组管理-useradd与usermod与userdel与sudo.md) |
+| Day 07 | ✅ | 第一周综合练习 | [📄 查看](day07-第一周综合练习.md) |
+| Day 08 | ✅ | 进程管理基础 — ps/top/htop/pstree | [📄 查看](day08-进程管理基础-ps与top与htop与pstree.md) |
+| Day 09 | ✅ | 进程控制 — kill/killall/pkill/信号机制 | [📄 查看](day09-进程控制-kill与killall与pkill与信号机制.md) |
+| Day 10 | ✅ | systemd 服务管理 — systemctl/单元文件 | [📄 查看](day10-systemd服务管理-systemctl与单元文件.md) |
+| Day 11 | ✅ | 系统监控命令 — uptime/free/df/vmstat/sar/iostat | [📄 查看](day11-系统监控命令-uptime与free与df与vmstat与sar与iostat.md) |
+| Day 12 | ✅ | 磁盘管理 — fdisk/mkfs/mount/LVM | [📄 查看](day12-磁盘管理-fdisk与mkfs与mount与LVM.md) |
+| Day 13 | ✅ | 日志管理 — journalctl/rsyslog/logrotate/日志分析 | [📄 查看](day13-日志管理-journalctl与rsyslog与logrotate与日志分析.md) |
+| Day 14 | ✅ | 第二周综合实战 — 搭建 LAMP 环境 | [📄 查看](day14-第二周综合实战-搭建LAMP环境.md) |
+| Day 15 | ✅ | Shell 脚本基础 — 变量/环境变量/引号/#! 解释器 | [📄 查看](day15-Shell脚本基础-变量与环境变量与引号与#!解释器.md) |
+| Day 16 | ✅ | Shell 条件判断 — if/elif/else/test 运算符 | [📄 查看](day16-Shell条件判断-if与elif与else与test运算符.md) |
+| Day 17 | ✅ | Shell 循环结构 — for/while/until | [📄 查看](day17-Shell循环结构-for与while与until.md) |
+| Day 18 | ✅ | Shell 函数 — 函数定义/参数传递/返回值/作用域 | [📄 查看](day18-Shell函数-函数定义与参数传递与返回值与作用域.md) |
+| Day 19 | ✅ | Case 语句与 select 菜单 | [📄 查看](day19-Case语句与select菜单.md) |
+| Day 20 | ✅ | 数组操作 — 索引数组/关联数组/数组遍历 | [📄 查看](day20-数组操作-索引数组与关联数组与数组遍历.md) |
+| Day 21 | ✅ | 字符串处理与正则 — sed/awk 进阶 | [📄 查看](day21-字符串处理与正则-sed与awk进阶.md) |
+| Day 22 | ✅ | 脚本调试与信号处理 — set/trap/debug | [📄 查看](day22-脚本调试与信号处理-set与trap与debug.md) |
+| Day 23 | ✅ | expect 自动化交互 — SSH 自动登录/批量配置 | [📄 查看](day23-expect自动化交互-SSH自动登录与批量配置.md) |
+| Day 24 | ✅ | 服务器初始化脚本 | [📄 查看](day24-服务器初始化脚本.md) |
+| Day 25 | ✅ | 日志监控告警脚本 | [📄 查看](day25-日志监控告警脚本.md) |
+| Day 26 | ✅ | 自动备份脚本 | [📄 查看](day26-自动备份脚本.md) |
+| Day 27 | ✅ | Bash 脚本编程进阶 — 高级技巧 | [📄 查看](day27-Bash脚本编程进阶-高级技巧.md) |
+| Day 28 | ✅ | Linux 基础与 Shell 脚本综合能力评估 | [📄 查看](day28-Linux基础与Shell脚本综合能力评估.md) |
 
 ---
 
@@ -49,14 +49,14 @@
 | Day 32 | ⏳ | IP 协议 — 地址分类、子网掩码、CIDR、NAT | 待生成 |
 | Day 33 | ⏳ | 路由基础 — 路由表、默认网关、静态路由 | 待生成 |
 | Day 34 | ⏳ | DNS 协议 — 记录类型、解析链、TTL、DNS 安全 | 待生成 |
-| Day 35 | ⏳ | 复习与实战 | 待生成 |
+| Day 35 | ⏳ | 从 URL 到页面的完整过程 | 待生成 |
 | Day 36 | ⏳ | ping/traceroute/mtr/dig | 待生成 |
 | Day 37 | ⏳ | nc/curl/wget 进阶 | 待生成 |
 | Day 38 | ⏳ | tcpdump 抓包分析 | 待生成 |
 | Day 39 | ⏳ | iptables/nftables 防火墙 + 云安全组 | 待生成 |
-| Day 40 | ✅ | HTTP/HTTPS 协议深入 | [📄 查看](day40/README.md) |
-| Day 41 | ✅ | Socket 编程与 Nginx/HAProxy 负载均衡 | [📄 查看](day41/README.md) |
-| Day 42 | ✅ | 阶段总结 | [📄 查看](day42/README.md) |
+| Day 40 | ✅ | HTTP/HTTPS 协议深入 | [📄 查看](day40-HTTP与HTTPS协议深入.md) |
+| Day 41 | ✅ | Socket 编程与 Nginx/HAProxy 负载均衡 | [📄 查看](day41-Socket编程与Nginx与HAProxy负载均衡.md) |
+| Day 42 | ✅ | 网络基础综合评估 | [📄 查看](day42-网络基础综合评估.md) |
 
 ---
 
@@ -64,7 +64,7 @@
 
 | 天数 | 状态 | 学习主题 | 文档链接 |
 |------|------|---------|---------|
-| Day 43 | ✅ | Python 环境搭建与开发规范 | [📄 查看](day43/README.md) |
+| Day 43 | ✅ | Python 环境搭建与开发规范 | [📄 查看](day43-Python环境搭建与开发规范.md) |
 | Day 44 | ⏳ | 数据类型与配置文件处理 | 待生成 |
 | Day 45 | ⏳ | 系统命令执行与文件操作 | 待生成 |
 | Day 46 | ⏳ | 函数、日志模块与异常处理 | 待生成 |
@@ -75,9 +75,9 @@
 | Day 51 | ⏳ | CLI 工具开发 | 待生成 |
 | Day 52 | ⏳ | 装饰器与高级技巧 | 待生成 |
 | Day 53 | ⏳ | 面向对象设计（SRE 工具架构） | 待生成 |
-| Day 54 | ⏳ | 实战项目 | 待生成 |
-| Day 55 | ⏳ | 实战项目 | 待生成 |
-| Day 56 | ⏳ | Python 阶段测试 | 待生成 |
+| Day 54 | ⏳ | 主机监控系统（Python 版） | 待生成 |
+| Day 55 | ⏳ | 批量管理工具 | 待生成 |
+| Day 56 | ⏳ | 待确定 | 待生成 |
 
 ---
 
@@ -95,9 +95,9 @@
 | Day 64 | ⏳ | CLI 工具开发 | 待生成 |
 | Day 65 | ⏳ | Context 与超时控制 | 待生成 |
 | Day 66 | ⏳ | 测试与基准测试 | 待生成 |
-| Day 67 | ⏳ | 实战项目 | 待生成 |
-| Day 68 | ⏳ | 实战项目 | 待生成 |
-| Day 69 | ⏳ | Go 阶段测试 | 待生成 |
+| Day 67 | ⏳ | Prometheus Exporter | 待生成 |
+| Day 68 | ⏳ | 并发服务发现工具 | 待生成 |
+| Day 69 | ⏳ | 待确定 | 待生成 |
 
 ---
 
@@ -110,7 +110,7 @@
 | Day 72 | ⏳ | MySQL 高可用与备份 | 待生成 |
 | Day 73 | ⏳ | Redis 运维基础 | 待生成 |
 | Day 74 | ⏳ | Redis 高可用与集群 | 待生成 |
-| Day 75 | ⏳ | 复习与实战 | 待生成 |
+| Day 75 | ⏳ | 数据库综合评估 | 待生成 |
 
 ---
 
@@ -124,14 +124,14 @@
 | Day 79 | ⏳ | Docker 容器管理 | 待生成 |
 | Day 80 | ⏳ | Docker 数据管理 | 待生成 |
 | Day 81 | ⏳ | Docker 网络管理 | 待生成 |
-| Day 82 | ⏳ | 实战项目 | 待生成 |
+| Day 82 | ⏳ | Docker 化 Web 应用 | 待生成 |
 | Day 83 | ⏳ | Dockerfile 最佳实践 | 待生成 |
 | Day 84 | ⏳ | docker-compose 多容器编排 | 待生成 |
 | Day 85 | ⏳ | Docker 私有仓库 | 待生成 |
 | Day 86 | ⏳ | Docker 安全 | 待生成 |
 | Day 87 | ⏳ | Docker 网络进阶 | 待生成 |
 | Day 88 | ⏳ | Docker 监控与日志 | 待生成 |
-| Day 89 | ⏳ | Docker 阶段测试 | 待生成 |
+| Day 89 | ⏳ | 多容器应用部署 + 安全扫描 | 待生成 |
 
 ---
 
@@ -152,8 +152,8 @@
 | Day 100 | ⏳ | 调度器与亲和性 | 待生成 |
 | Day 101 | ⏳ | HPA 与扩缩容 | 待生成 |
 | Day 102 | ⏳ | Helm 包管理器 | 待生成 |
-| Day 103 | ⏳ | 实战项目 | 待生成 |
-| Day 104 | ⏳ | K8s 阶段测试 | 待生成 |
+| Day 103 | ⏳ | 搭建 K8s 生产级应用 | 待生成 |
+| Day 104 | ⏳ | 部署完整应用 + 理论测试 | 待生成 |
 
 ---
 
@@ -173,15 +173,15 @@
 | Day 114 | ⏳ | EKS 弹性 Kubernetes | 待生成 |
 | Day 115 | ⏳ | AWS 安全 | 待生成 |
 | Day 116 | ⏳ | AWS 高可用架构 | 待生成 |
-| Day 117 | ⏳ | 备考 | 待生成 |
-| Day 118 | ⏳ | 备考 | 待生成 |
-| Day 119 | ⏳ | 自我评估 | 待生成 |
+| Day 117 | ⏳ | AWS SAA 认证知识点梳理 | 待生成 |
+| Day 118 | ⏳ | AWS SAA 认证刷题 | 待生成 |
+| Day 119 | ⏳ | AWS 知识掌握 | 待生成 |
 | Day 120 | ⏳ | Terraform 简介 | 待生成 |
 | Day 121 | ⏳ | Terraform 基础 | 待生成 |
 | Day 122 | ⏳ | Terraform 进阶 | 待生成 |
 | Day 123 | ⏳ | Terraform 工作流 | 待生成 |
-| Day 124 | ⏳ | 实战项目 | 待生成 |
-| Day 125 | ⏳ | 实战项目 | 待生成 |
+| Day 124 | ⏳ | VPC 模块化 | 待生成 |
+| Day 125 | ⏳ | EKS 基础设施 | 待生成 |
 
 ---
 
@@ -194,22 +194,22 @@
 | Day 128 | ⏳ | Ansible 常用模块 | 待生成 |
 | Day 129 | ⏳ | Ansible Roles | 待生成 |
 | Day 130 | ⏳ | Ansible 进阶 | 待生成 |
-| Day 131 | ⏳ | 实战项目 | 待生成 |
-| Day 132 | ⏳ | IaC 阶段总结 | 待生成 |
+| Day 131 | ⏳ | 自动化部署 | 待生成 |
+| Day 132 | ⏳ | Terraform + Ansible 综合实践 | 待生成 |
 | Day 133 | ⏳ | 可观测性基础 — SLO/SLI/SLA | 待生成 |
 | Day 134 | ⏳ | Prometheus 基础 | 待生成 |
 | Day 135 | ⏳ | PromQL 查询语言 | 待生成 |
 | Day 136 | ⏳ | Grafana 可视化 | 待生成 |
 | Day 137 | ⏳ | Kubernetes 监控 | 待生成 |
 | Day 138 | ⏳ | Alertmanager 告警 | 待生成 |
-| Day 139 | ⏳ | 实战项目 | 待生成 |
+| Day 139 | ⏳ | 搭建完整监控体系 | 待生成 |
 | Day 140 | ⏳ | 日志收集基础 — ELK | 待生成 |
 | Day 141 | ⏳ | Logstash/Fluentd 日志采集 | 待生成 |
 | Day 142 | ⏳ | Kibana 日志可视化 | 待生成 |
 | Day 143 | ⏳ | Loki 日志系统 | 待生成 |
 | Day 144 | ⏳ | 链路追踪 — Jaeger | 待生成 |
 | Day 145 | ⏳ | APM 集成 | 待生成 |
-| Day 146 | ⏳ | 可观测性阶段总结 | 待生成 |
+| Day 146 | ⏳ | 三大支柱 | 待生成 |
 
 ---
 
@@ -223,14 +223,14 @@
 | Day 150 | ⏳ | Jenkins | 待生成 |
 | Day 151 | ⏳ | 构建工具集成 | 待生成 |
 | Day 152 | ⏳ | CI 中构建和推送镜像 | 待生成 |
-| Day 153 | ⏳ | 实战项目 | 待生成 |
+| Day 153 | ⏳ | 完整 CI/CD 流程 | 待生成 |
 | Day 154 | ⏳ | ArgoCD — GitOps | 待生成 |
 | Day 155 | ⏳ | 部署策略 | 待生成 |
 | Day 156 | ⏳ | 密钥管理 — Vault | 待生成 |
 | Day 157 | ⏳ | 多环境管理 | 待生成 |
 | Day 158 | ⏳ | 混沌工程 | 待生成 |
 | Day 159 | ⏳ | 安全扫描集成 | 待生成 |
-| Day 160 | ⏳ | 阶段总结 | 待生成 |
+| Day 160 | ⏳ | 完整 GitOps 流水线 | 待生成 |
 
 ---
 
@@ -243,13 +243,13 @@
 | Day 163 | ⏳ | 模型推理部署 | 待生成 |
 | Day 164 | ⏳ | 推理服务指标与监控 | 待生成 |
 | Day 165 | ⏳ | 模型微调流水线 | 待生成 |
-| Day 166 | ⏳ | 复习与实战 | 待生成 |
+| Day 166 | ⏳ | LLM Ops 基础综合 | 待生成 |
 | Day 167 | ⏳ | 模型服务高可用 | 待生成 |
 | Day 168 | ⏳ | RAG 架构运维 | 待生成 |
 | Day 169 | ⏳ | AI 应用监控 | 待生成 |
 | Day 170 | ⏳ | 安全与合规 | 待生成 |
-| Day 171 | ⏳ | 实战项目 | 待生成 |
-| Day 172 | ⏳ | LLM Ops 阶段测试 | 待生成 |
+| Day 171 | ⏳ | LLM 服务全链路 | 待生成 |
+| Day 172 | ⏳ | 待确定 | 待生成 |
 
 ---
 
@@ -263,7 +263,7 @@
 | Day 176 | ⏳ | 容量规划 | 待生成 |
 | Day 177 | ⏳ | 灾备与恢复 | 待生成 |
 | Day 178 | ⏳ | 成本优化 | 待生成 |
-| Day 179 | ⏳ | 实战项目 | 待生成 |
+| Day 179 | ⏳ | 综合 SRE 实践 | 待生成 |
 
 ---
 
@@ -271,13 +271,13 @@
 
 | 天数 | 状态 | 学习主题 | 文档链接 |
 |------|------|---------|---------|
-| Day 180 | ⏳ | 项目规划 | 待生成 |
-| Day 181 | ⏳ | 基础设施 | 待生成 |
-| Day 182 | ⏳ | 应用部署 | 待生成 |
-| Day 183 | ⏳ | 可观测性 | 待生成 |
-| Day 184 | ⏳ | CI/CD | 待生成 |
-| Day 185 | ⏳ | 混沌工程 | 待生成 |
-| Day 186 | ⏳ | 文档与复盘 | 待生成 |
+| Day 180 | ⏳ | 从零搭建生产级 SRE 平台 | 待生成 |
+| Day 181 | ⏳ | Terraform 创建 VPC + EKS | 待生成 |
+| Day 182 | ⏳ | 部署微服务 + K8s 资源 | 待生成 |
+| Day 183 | ⏳ | Prometheus + Grafana + Loki + Jaeger | 待生成 |
+| Day 184 | ⏳ | GitHub Actions → 构建 → ArgoCD 部署 | 待生成 |
+| Day 185 | ⏳ | 注入故障，验证自动恢复 | 待生成 |
+| Day 186 | ⏳ | 架构文档、运维手册、RCA 报告 | 待生成 |
 
 ---
 
