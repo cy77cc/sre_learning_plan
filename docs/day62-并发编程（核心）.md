@@ -18,64 +18,276 @@
 
 ## 📖 详细知识点
 
-### 1. 并发编程（核心） — 核心概念
+### 1. Goroutine — Go 的并发原语
 
-并发编程（核心） 是 SRE 工程师必须掌握的重要技能。
+#### 1.1 什么是 Goroutine？
 
-#### 1.1 基础知识
+Goroutine 是 Go 的轻量级线程，由 Go runtime 调度管理：
 
-- 理解并发编程（核心）的基本原理和架构
-- 掌握常用命令和操作方式
-- 能够在实际工作场景中应用
+| 特性 | OS 线程 | Goroutine |
+|------|---------|-----------|
+| 大小 | 1-2 MB | 2 KB（动态增长） |
+| 创建开销 | 慢（系统调用） | 快（~2μs） |
+| 数量 | ~几千 | ~百万 |
+| 调度 | OS 内核 | Go runtime（M:P:G 模型） |
+| 切换 | 内核态 | 用户态 |
 
-#### 1.2 SRE 实战场景
+```go
+package main
 
-在生产环境中，并发编程（核心）的应用场景包括：
-- **日常运维**：定期检查和维护
-- **故障排查**：快速定位和解决问题
-- **自动化**：编写脚本实现自动化管理
+import (
+    "fmt"
+    "time"
+)
 
-```bash
-# 基础操作示例
-# 根据并发编程（核心）主题执行相关命令
-# 参考官方文档获取详细信息
+func checkServer(name string) {
+    fmt.Printf("Checking %s...\n", name)
+    time.Sleep(1 * time.Second) // 模拟网络请求
+    fmt.Printf("%s is UP\n", name)
+}
+
+func main() {
+    servers := []string{"web-01", "web-02", "db-01", "cache-01"}
+
+    // 串行执行（4 秒）
+    // for _, s := range servers {
+    //     checkServer(s)
+    // }
+
+    // 并发执行（~1 秒）
+    for _, s := range servers {
+        go checkServer(s) // 启动 goroutine
+    }
+
+    // 等待 goroutine 完成
+    time.Sleep(2 * time.Second)
+}
 ```
 
----
+#### 1.2 WaitGroup — 等待多个 Goroutine
 
-### 2. 实际操作
+```go
+package main
 
-#### 2.1 基础练习
+import (
+    "fmt"
+    "sync"
+    "time"
+)
 
-```bash
-# 练习 1：基础命令
-# 查阅官方文档，完成基本操作
+func main() {
+    servers := []string{"web-01", "web-02", "db-01", "cache-01"}
+    var wg sync.WaitGroup
+
+    for _, s := range servers {
+        wg.Add(1) // 增加计数
+        go func(name string) {
+            defer wg.Done() // 完成时减少计数
+            checkServer(name)
+        }(s)
+    }
+
+    wg.Wait() // 等待所有完成
+    fmt.Println("All checks done!")
+}
+
+func checkServer(name string) {
+    time.Sleep(1 * time.Second)
+    fmt.Printf("%s checked\n", name)
+}
 ```
 
-#### 2.2 进阶练习
+### 2. Channel — Goroutine 间通信
 
-```bash
-# 练习 2：结合实际场景
-# 尝试在测试环境中模拟生产问题
+> **Go 的并发哲学：不要通过共享内存来通信，而要通过通信来共享内存**
+
+#### 2.1 基础 Channel
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+    // 创建 channel
+    ch := make(chan string)
+
+    // 发送
+    go func() {
+        ch <- "health check result"
+    }()
+
+    // 接收（阻塞直到有数据）
+    result := <-ch
+    fmt.Println(result)
+}
 ```
 
----
+#### 2.2 带缓冲的 Channel
 
-### 3. 常见问题
+```go
+// 无缓冲（同步）
+ch := make(chan int)       // 发送和接收必须配对
 
-| 问题 | 排查思路 |
-|------|---------|
-| 服务无法启动 | 检查日志、端口占用、配置文件 |
-| 性能下降 | 监控资源使用、检查瓶颈 |
-| 连接失败 | 检查网络、防火墙、服务状态 |
+// 带缓冲（异步）
+ch := make(chan int, 10)   // 最多存 10 个值不阻塞
+ch <- 1
+ch <- 2
+// ... 前 10 个不会阻塞
+```
 
----
+#### 2.3 Worker Pool 模式（SRE 常用）
 
-### 4. 扩展阅读
+```go
+package main
 
-- 查阅官方文档获取最准确的信息
-- 参考相关技术博客和教程
-- 在测试环境中反复练习
+import (
+    "fmt"
+    "sync"
+    "time"
+)
+
+func main() {
+    servers := []string{}
+    for i := 1; i <= 20; i++ {
+        servers = append(servers, fmt.Sprintf("web-%02d", i))
+    }
+
+    // 工作通道
+    jobs := make(chan string, len(servers))
+    results := make(chan string, len(servers))
+
+    // 启动 5 个 worker
+    var wg sync.WaitGroup
+    for w := 1; w <= 5; w++ {
+        wg.Add(1)
+        go func(id int) {
+            defer wg.Done()
+            for server := range jobs {
+                time.Sleep(200 * time.Millisecond) // 模拟检查
+                results <- fmt.Sprintf("[Worker %d] %s: OK", id, server)
+            }
+        }(w)
+    }
+
+    // 发送任务
+    for _, s := range servers {
+        jobs <- s
+    }
+    close(jobs) // 关闭通道，通知 worker 没有更多任务
+
+    // 等待完成
+    go func() {
+        wg.Wait()
+        close(results)
+    }()
+
+    // 收集结果
+    for r := range results {
+        fmt.Println(r)
+    }
+}
+```
+
+### 3. Select — 多路复用
+
+```go
+func main() {
+    ch1 := make(chan string)
+    ch2 := make(chan string)
+    done := make(chan bool)
+
+    go func() { ch1 <- "from ch1" }()
+    go func() { ch2 <- "from ch2" }()
+
+    for {
+        select {
+        case msg := <-ch1:
+            fmt.Println(msg)
+        case msg := <-ch2:
+            fmt.Println(msg)
+        case <-done:
+            fmt.Println("Done!")
+            return
+        case <-time.After(5 * time.Second):
+            fmt.Println("Timeout!")
+            return
+        }
+    }
+}
+```
+
+### 4. Sync — 互斥锁
+
+```go
+var (
+    mu      sync.RWMutex
+    metrics = make(map[string]float64)
+)
+
+func updateMetric(name string, value float64) {
+    mu.Lock()
+    defer mu.Unlock()
+    metrics[name] = value
+}
+
+func getMetric(name string) float64 {
+    mu.RLock()
+    defer mu.RUnlock()
+    return metrics[name]
+}
+
+func getSnapshot() map[string]float64 {
+    mu.RLock()
+    defer mu.RUnlock()
+    snapshot := make(map[string]float64)
+    for k, v := range metrics {
+        snapshot[k] = v
+    }
+    return snapshot
+}
+```
+
+### 5. SRE 实战：并发服务器巡检
+
+```go
+func inspectServers(servers []ServerConfig) []InspectionResult {
+    var (
+        mu      sync.Mutex
+        results []InspectionResult
+        wg      sync.WaitGroup
+    )
+
+    // 限制并发数
+    sem := make(chan struct{}, 10)
+
+    for _, srv := range servers {
+        wg.Add(1)
+        go func(s ServerConfig) {
+            defer wg.Done()
+            sem <- struct{}{}        // 获取信号量
+            defer func() { <-sem }() // 释放信号量
+
+            res := inspectSingle(s)
+            mu.Lock()
+            results = append(results, res)
+            mu.Unlock()
+        }(srv)
+    }
+
+    wg.Wait()
+    return results
+}
+```
+
+### 6. 常见问题
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| goroutine 泄漏 | channel 无人接收 | 确保有消费方，或用 context 取消 |
+| deadlock | 无缓冲 channel 发送/接收不配对 | 检查 channel 操作逻辑 |
+| 数据竞争 | 多个 goroutine 写同一变量 | 用 mutex 或 channel |
+| panic: send on closed channel | 向已关闭的 channel 发送 | 确保发送方负责关闭 |
 
 
 ---
@@ -207,5 +419,5 @@ analyze_nginx_log("/var/log/nginx/access.log")
 
 ---
 
-*由 SRE 学习计划自动生成 | 2026-05-02 13:37:24*  
+*由 SRE 学习计划自动生成 | 2026-05-02 15:29:03*  
 *Generated by Hermes Agent with review*
