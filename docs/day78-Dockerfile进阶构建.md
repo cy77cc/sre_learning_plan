@@ -1,234 +1,236 @@
-# Day 78: Dockerfile 进阶构建
+     1|# Day 78: Dockerfile 进阶构建
+     2|
+     3|> 📅 日期：2026-05-03
+     4|> 📖 学习主题：Dockerfile 进阶构建
+     5|> ⏰ 计划学习时间：2-3 小时
+     6|
+     7|---
+     8|
+     9|## 🎯 学习目标
+    10|
+    11|- 掌握 Dockerfile 所有常用指令
+    12|- 理解构建缓存机制
+    13|- 能编写生产级 Dockerfile
+    14|- 掌握多阶段构建
+    15|
+    16|---
+    17|
+    18|## 📖 Dockerfile 指令
+    19|
+    20|### 1. 基础指令
+    21|
+    22|| 指令 | 用途 | 示例 |
+    23||------|------|------|
+    24|| FROM | 指定基础镜像 | `FROM python:3.11-slim` |
+    25|| RUN | 执行命令 | `RUN apt-get update` |
+    26|| COPY | 复制文件 | `COPY app.py /app/` |
+    27|| ADD | 复制文件（支持 URL/tar） | `ADD https://... /tmp/` |
+    28|| WORKDIR | 设置工作目录 | `WORKDIR /app` |
+    29|| EXPOSE | 声明端口 | `EXPOSE 8080` |
+    30|| ENV | 设置环境变量 | `ENV NODE_ENV=production` |
+    31|| CMD | 默认启动命令 | `CMD ["python", "app.py"]` |
+    32|| ENTRYPOINT | 入口点 | `ENTRYPOINT ["nginx"]` |
+    33|| USER | 切换用户 | `USER nobody` |
+    34|| VOLUME | 声明挂载点 | `VOLUME /data` |
+    35|| ARG | 构建参数 | `ARG VERSION=latest` |
+    36|| LABEL | 添加元数据 | `LABEL maintainer="team@example.com"` |
+    37|
+    38|### 2. CMD vs ENTRYPOINT
+    39|
+    40|```dockerfile
+    41|# CMD — 可被 docker run 覆盖
+    42|FROM ubuntu
+    43|CMD ["echo", "hello"]
+    44|# docker run myimage          → 输出 hello
+    45|# docker run myimage echo hi  → 输出 hi
+    46|
+    47|# ENTRYPOINT — 不可被覆盖
+    48|FROM ubuntu
+    49|ENTRYPOINT ["echo"]
+    50|CMD ["hello"]
+    51|# docker run myimage          → 输出 hello
+    52|# docker run myimage hi       → 输出 hi
+    53|
+    54|# 组合使用（推荐）
+    55|ENTRYPOINT ["python"]
+    56|CMD ["app.py"]
+    57|```
+    58|
+    59|### 3. 多阶段构建
+    60|
+    61|```dockerfile
+    62|# Stage 1: Build
+    63|FROM golang:1.21 AS builder
+    64|WORKDIR /app
+    65|COPY go.mod go.sum ./
+    66|RUN go mod download
+    67|COPY . .
+    68|RUN CGO_ENABLED=0 go build -o /myapp
+    69|
+    70|# Stage 2: Run
+    71|FROM alpine:3.18
+    72|RUN apk --no-cache add ca-certificates
+    73|COPY --from=builder /myapp /myapp
+    74|EXPOSE 8080
+    75|ENTRYPOINT ["/myapp"]
+    76|```
+    77|
+    78|### 4. 构建缓存优化
+    79|
+    80|```dockerfile
+    81|# ❌ 缓存经常失效
+    82|COPY . /app
+    83|RUN pip install -r requirements.txt
+    84|
+    85|# ✅ 先复制依赖文件
+    86|COPY requirements.txt .
+    87|RUN pip install --no-cache-dir -r requirements.txt
+    88|COPY . /app
+    89|```
+    90|
+    91|### 5. 生产级 Dockerfile 示例
+    92|
+    93|```dockerfile
+    94|FROM python:3.11-slim AS base
+    95|
+    96|LABEL maintainer="sre-team@example.com"
+    97|LABEL version="1.0"
+    98|
+    99|ENV PYTHONDONTWRITEBYTECODE=1 \
+   100|    PYTHONUNBUFFERED=1 \
+   101|    PIP_NO_CACHE_DIR=1
+   102|
+   103|WORKDIR /app
+   104|
+   105|FROM base AS builder
+   106|COPY requirements.txt .
+   107|RUN pip wheel --no-cache-dir -w /wheels -r requirements.txt
+   108|
+   109|FROM base AS runtime
+   110|COPY --from=builder /wheels /wheels
+   111|RUN pip install --no-cache-dir /wheels/*
+   112|COPY . /app
+   113|
+   114|RUN useradd -r -s /bin/false appuser \
+   115|    && chown -R appuser:appuser /app
+   116|
+   117|USER appuser
+   118|EXPOSE 8080
+   119|
+   120|HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+   121|    CMD curl -f http://localhost:8080/health || exit 1
+   122|
+   123|CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+   124|```
+   125|
+   126|---
+   127|
+   128|## 📚 扩展阅读
+   129|
+   130|- [Dockerfile 参考](https://docs.docker.com/engine/reference/builder/)
+   131|- [Dockerfile 最佳实践](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)
+   132|
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Dockerfile 进阶构建  
-> ⏰ 计划学习时间：2-3 小时
-
----
-
-## 🎯 学习目标
-
-完成 Day 78 的学习后，你应该掌握：
-- 理解 Dockerfile 进阶构建 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
-
----
-
-## 📖 详细知识点
-
-### 1. Dockerfile 进阶指令
-
-#### 1.1 常用指令详解
+## 5. ONBUILD 指令
 
 ```dockerfile
-# ARG: 构建时变量（不留在镜像中）
-ARG NODE_VERSION=18
-FROM node:${NODE_VERSION}-alpine
-
-# ENV: 运行时环境变量
-ENV NODE_ENV=production
-ENV PORT=3000
-
-# USER: 切换用户（安全最佳实践）
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-USER appuser
-
-# HEALTHCHECK: 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
-
-# ENTRYPOINT + CMD 组合
-ENTRYPOINT ["nginx"]
-CMD ["-g", "daemon off;"]
-# 运行: docker run my-nginx -g "daemon off;"
-# CMD 会被覆盖，ENTRYPOINT 不会
+FROM node:18
+ONBUILD COPY . /app
+ONBUILD RUN npm install
 ```
 
-#### 1.2 多阶段构建
+## 6. SHELL 指令
 
 ```dockerfile
-# 阶段 1: 构建
-FROM golang:1.22 AS builder
-WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server
-
-# 阶段 2: 运行
-FROM alpine:3.19
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/server /app/server
-USER nobody
-EXPOSE 8080
-ENTRYPOINT ["/app/server"]
-
-# 结果：最终镜像 ~10MB（仅包含运行所需文件）
-# 对比：golang:1.22 基础镜像 ~800MB
-```
-
-### 2. 镜像大小优化
-
-```dockerfile
-# ❌ 不好：每层 RUN 都增加镜像大小
 FROM ubuntu:22.04
-RUN apt update
-RUN apt install -y nginx
-RUN apt install -y curl
-RUN rm -rf /var/lib/apt/lists/*
-
-# ✅ 好：合并 RUN，清理缓存
-FROM ubuntu:22.04
-RUN apt update && apt install -y --no-install-recommends nginx curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# 结果：~100MB vs ~150MB
+SHELL ["/bin/bash", "-c"]
+RUN source /opt/app/env && npm install
 ```
 
-**优化技巧**：
-```
-1. 用 slim/alpine 基础镜像
-2. 合并 RUN 指令
-3. --no-install-recommends
-4. 多阶段构建
-5. .dockerignore 排除不必要文件
-6. 使用 build cache（合理排列指令顺序）
-```
-
-### 3. .dockerignore
-
-```
-# 不打包进镜像的文件
-.git
-.gitignore
-node_modules
-*.md
-.env
-docker-compose*.yml
-Dockerfile
-.dockerignore
-__pycache__
-*.pyc
-```
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：多阶段构建优化
+## 7. HEALTHCHECK 指令
 
 ```dockerfile
-# Build stage
-FROM golang:1.21 AS builder
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+HEALTHCHECK NONE
+```
+
+## 8. 生产级模板
+
+### Go
+```dockerfile
+FROM golang:1.21-alpine AS builder
+RUN apk add --no-cache git
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /server .
 
-# Runtime stage
 FROM alpine:3.18
 RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
+COPY --from=builder /server /server
+USER nobody
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
+ENTRYPOINT ["/server"]
 ```
 
-### 练习 2：docker-compose 编排
-
-```yaml
-version: "3.8"
-services:
-  web:
-    build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
-    environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
-  db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-volumes:
-  pgdata:
+### Node.js
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+USER node
+EXPOSE 3000
+CMD ["node", "server.js"]
 ```
 
+### Java
+```dockerfile
+FROM maven:3.9-eclipse-temurin-17 AS builder
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline
+COPY src ./src
+RUN mvn package -DskipTests
+
+FROM eclipse-temurin:17-jre-alpine
+COPY --from=builder /app/target/*.jar /app.jar
+USER nobody
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app.jar"]
+```
 
 ---
 
-## 📚 最新优质资源
+## 🧪 练习题
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
+### 练习 1：编写 Rust Dockerfile
 
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
+<details>
+<summary>答案</summary>
 
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
+```dockerfile
+FROM rust:1.72 AS builder
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main(){}" > src/main.rs
+RUN cargo build --release
+COPY . .
+RUN cargo build --release
 
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/myapp /myapp
+EXPOSE 8080
+ENTRYPOINT ["/myapp"]
+```
+</details>
 
 ---
 
-## 📝 笔记
+## 📚 扩展阅读
 
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:18*  
-*Generated by Hermes Agent with review*
+- [Dockerfile 参考](https://docs.docker.com/engine/reference/builder/)
+- [Dockerfile 最佳实践](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)

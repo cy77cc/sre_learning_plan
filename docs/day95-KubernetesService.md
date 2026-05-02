@@ -1,224 +1,75 @@
 # Day 95: Kubernetes Service
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Kubernetes Service  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Kubernetes Service
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 95 的学习后，你应该掌握：
-- 理解 Kubernetes Service 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Service 的四种类型
+- 掌握服务发现和负载均衡
 
 ---
 
-## 📖 详细知识点
+## 📖 Service 类型
 
-### 1. Service — 稳定的网络访问点
-
-#### 1.1 为什么需要 Service？
-
-```
-Pod IP 会变化！
-- Pod 重启 → 新 IP
-- 滚动更新 → 新旧 Pod IP 不同
-- 扩缩容 → 新增 Pod 有不同的 IP
-
-Service 提供：
-✅ 稳定的 ClusterIP（不随 Pod 变化）
-✅ 负载均衡到后端 Pod
-✅ 基于 Label Selector 自动发现 Pod
-```
-
-#### 1.2 Service 类型
-
-| 类型 | 说明 | 适用场景 |
-|------|------|----------|
-| **ClusterIP** | 集群内部访问（默认） | 微服务间通信 |
-| **NodePort** | 通过节点端口暴露 | 开发测试 |
-| **LoadBalancer** | 云厂商负载均衡器 | 生产对外服务 |
-| **ExternalName** | CNAME 到外部服务 | 外部 API 代理 |
+### 1. ClusterIP（默认）
 
 ```yaml
-# ClusterIP（内部服务）
 apiVersion: v1
 kind: Service
 metadata:
-  name: web-app
+  name: myapp
 spec:
-  selector:
-    app: web-app
-  ports:
-  - port: 80          # Service 端口
-    targetPort: 8080  # Pod 端口
-    protocol: TCP
   type: ClusterIP
-
-# NodePort（通过节点访问）
-apiVersion: v1
-kind: Service
-metadata:
-  name: web-app
-spec:
   selector:
-    app: web-app
+    app: myapp
   ports:
-  - port: 80
-    targetPort: 8080
-    nodePort: 30080  # 固定端口 30000-32767
+    - port: 80
+      targetPort: 8080
+```
+- 集群内部可访问
+- 自动分配 ClusterIP
+- 内置 DNS：myapp.default.svc.cluster.local
+
+### 2. NodePort
+
+```yaml
+spec:
   type: NodePort
-
-# LoadBalancer（云厂商）
-apiVersion: v1
-kind: Service
-metadata:
-  name: web-app
-spec:
-  selector:
-    app: web-app
   ports:
-  - port: 80
-    targetPort: 8080
+    - port: 80
+      targetPort: 8080
+      nodePort: 30080
+```
+- 通过节点 IP + 端口访问
+- 端口范围：30000-32767
+
+### 3. LoadBalancer
+
+```yaml
+spec:
   type: LoadBalancer
-```
-
-### 2. Headless Service（StatefulSet 用）
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: mysql
-spec:
-  clusterIP: None  # Headless！
-  selector:
-    app: mysql
   ports:
-  - port: 3306
-
-# 效果：DNS 返回所有 Pod IP
-# nslookup mysql.default.svc.cluster.local
-# → 10.244.1.5, 10.244.2.3, 10.244.3.7
+    - port: 80
+      targetPort: 8080
 ```
+- 云提供商自动创建 LB
+- 外部可访问
 
-
----
-
-## 💻 实战练习
-
-### 练习 1：部署完整应用
+### 4. ExternalName
 
 ```yaml
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
 spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    metadata:
-      labels:
-        app: web-app
-    spec:
-      containers:
-      - name: web-app
-        image: myapp:latest
-        ports:
-        - containerPort: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
+  type: ExternalName
+  externalName: api.example.com
 ```
-
-```bash
-kubectl apply -f deployment.yaml
-kubectl get pods -w
-kubectl rollout status deployment/web-app
-kubectl rollout undo deployment/web-app  # 回滚
-```
-
+- DNS CNAME 别名
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:20*  
-*Generated by Hermes Agent with review*
+- [Service 文档](https://kubernetes.io/docs/concepts/services-networking/service/)

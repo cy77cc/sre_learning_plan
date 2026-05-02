@@ -1,192 +1,219 @@
-# Day 47: 正则表达式与日志解析
+# Day 47: Python 正则表达式与日志解析
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：正则表达式与日志解析  
+> 📅 日期：2026-05-02
+> 📖 学习主题：Python 正则表达式与日志解析
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 47 的学习后，你应该掌握：
-- 理解 正则表达式与日志解析 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 掌握 re 模块的常用方法
+- 能用正则解析 Nginx/Apache 日志
+- 理解贪婪与非贪婪匹配
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 日志体系
+### 1. re 模块核心方法
 
-#### 1.1 重要日志文件
+```python
+import re
 
-| 日志 | 用途 |
-|------|------|
-| `/var/log/syslog` | 系统日志（Ubuntu） |
-| `/var/log/auth.log` | 认证/登录日志 |
-| `/var/log/kern.log` | 内核日志 |
-| `/var/log/nginx/` | Nginx 访问和错误日志 |
-| `/var/log/journal/` | systemd journal |
+# match - 从头匹配
+re.match(r'\d+', '123abc')  # match '123'
 
-#### 1.2 journalctl 高级用法
+# search - 任意位置
+re.search(r'\d+', 'abc123')  # match '123'
 
-```bash
-journalctl -f                          # 实时跟踪
-journalctl -u nginx --since "1h ago"   # 服务日志
-journalctl -p err                      # 错误级别
-journalctl --disk-usage                # 占用空间
-sudo journalctl --vacuum-size=500M    # 清理
+# findall - 所有匹配
+re.findall(r'\d+', 'a1b22c333')  # ['1', '22', '333']
+
+# finditer - 迭代器
+for m in re.finditer(r'\d+', 'a1b22c333'):
+    print(m.group(), m.start(), m.end())
+
+# sub - 替换
+re.sub(r'\d+', 'NUM', 'a1b22c')  # 'aNUMbNUMc'
+
+# split - 分割
+re.split(r'[,\s]+', 'a,b  c,d')  # ['a', 'b', 'c', 'd']
 ```
 
-#### 1.3 logrotate 日志轮转
+### 2. 正则语法速查
 
-```bash
-# 查看现有配置
-ls /etc/logrotate.d/
+| 模式 | 含义 | 示例 |
+|------|------|------|
+| `\d` | 数字 | `123` |
+| `\w` | 单词字符 | `abc_123` |
+| `\s` | 空白字符 | 空格、Tab |
+| `.` | 任意字符 | |
+| `*` | 0次或多次 | `ab*c` |
+| `+` | 1次或多次 | `ab+c` |
+| `?` | 0次或1次 | `ab?c` |
+| `{n,m}` | n到m次 | `\d{2,4}` |
+| `^` | 行首 | `^ERROR` |
+| `$` | 行尾 | `done$` |
+| `()` | 分组 | `(\d+)-(\d+)` |
+| `\|` | 或 | `error\|warning` |
+| `[]` | 字符集 | `[a-zA-Z0-9]` |
 
-# 常用参数：
-# daily/weekly/monthly  — 轮转频率
-# rotate N              — 保留 N 个旧文件
-# compress              — 压缩旧文件
-# size 100M             — 超过此大小才轮转
-# missingok             — 文件不存在不报错
+### 3. 解析 Nginx 日志
+
+```python
+import re
+from collections import Counter
+
+LOG_PATTERN = re.compile(
+    r'(?P<ip>\d+\.\d+\.\d+\.\d+) - - '
+    r'\[(?P<time>[^\]]+)\] '
+    r'"(?P<method>\w+) (?P<path>\S+) (?P<proto>\S+)" '
+    r'(?P<status>\d+) (?P<size>\d+) '
+    r'"(?P<referer>[^"]*)" '
+    r'"(?P<ua>[^"]*)"'
+)
+
+def parse_nginx_log(filepath):
+    results = []
+    with open(filepath) as f:
+        for line in f:
+            m = LOG_PATTERN.match(line)
+            if m:
+                results.append(m.groupdict())
+    return results
+
+# 分析
+logs = parse_nginx_log("/var/log/nginx/access.log")
+status_counts = Counter(log["status"] for log in logs)
+print(status_counts)
+
+# Top IPs
+ip_counts = Counter(log["ip"] for log in logs)
+for ip, count in ip_counts.most_common(10):
+    print(f"{ip}: {count} requests")
+```
+
+### 4. 贪婪 vs 非贪婪
+
+```python
+# 贪婪（默认）
+re.findall(r'<.*>', '<b>bold</b> <i>italic</i>')
+# ['<b>bold</b> <i>italic</i>']  ← 匹配了整个字符串
+
+# 非贪婪（加 ?）
+re.findall(r'<.*?>', '<b>bold</b> <i>italic</i>')
+# ['<b>', '</b>', '<i>', '</i>']  ← 每个标签单独匹配
 ```
 
 ---
 
-### 2. SRE 实战
+## 🏗️ 实战：日志分析工具
 
-**日志爆满应急**：
-```bash
-# 不能直接 rm！（进程持有文件描述符，空间不释放）
-# 正确做法：清空文件
-> /var/log/nginx/access.log
+```python
+#!/usr/bin/env python3
+"""Analyze log files and generate reports."""
 
-# 安全审计：暴力破解检测
-grep "Failed password" /var/log/auth.log |     awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | head -10
+import re
+import argparse
+from collections import Counter
+from datetime import datetime
 
-# Nginx 日志分析
-awk '{print $9}' /var/log/nginx/access.log | sort | uniq -c | sort -rn
-awk '$9 >= 500' /var/log/nginx/access.log | head -20
+
+def analyze_access_log(filepath, top_n=10):
+    """Analyze Nginx/Apache access log."""
+    pattern = re.compile(
+        r'(\d+\.\d+\.\d+\.\d+).*?"(\w+) (\S+).*?" (\d{3})'
+    )
+
+    ips = Counter()
+    paths = Counter()
+    status_codes = Counter()
+
+    with open(filepath) as f:
+        for line in f:
+            m = pattern.search(line)
+            if m:
+                ips[m.group(1)] += 1
+                paths[m.group(3)] += 1
+                status_codes[m.group(4)] += 1
+
+    print(f"=== Log Analysis: {filepath} ===\n")
+
+    print(f"Total requests: {sum(ips.values())}\n")
+
+    print("Top IPs:")
+    for ip, count in ips.most_common(top_n):
+        print(f"  {ip:20s} {count}")
+
+    print("\nTop Paths:")
+    for path, count in paths.most_common(top_n):
+        print(f"  {path:40s} {count}")
+
+    print("\nStatus Codes:")
+    for code, count in sorted(status_codes.items()):
+        print(f"  {code}: {count}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", help="Log file path")
+    parser.add_argument("-n", "--top", type=int, default=10)
+    args = parser.parse_args()
+    analyze_access_log(args.file, args.top)
 ```
 
-
 ---
 
-## 💻 实战练习
+## 🧪 练习题
 
-### 练习 1：日志生命周期管理
+### 练习 1：提取错误日志
 
-```bash
-#!/bin/bash
-# 配置 Nginx 日志轮转
-cat > /etc/logrotate.d/nginx-custom << 'EOF'
-/var/log/nginx/*.log {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0640 www-data adm
-    sharedscripts
-    postrotate
-        [ -f /var/run/nginx.pid ] && kill -USR1 $(cat /var/run/nginx.pid)
-    endscript
-}
-EOF
+从 syslog 中提取所有包含 "error" 或 "fail" 的行，并提取时间戳和进程名。
 
-# 配置 journal 限制
-mkdir -p /etc/systemd/journald.conf.d
-cat > /etc/systemd/journald.conf.d/limits.conf << 'EOF'
-[Journal]
-SystemMaxUse=500M
-MaxRetentionSec=30day
-EOF
-systemctl restart systemd-journald
+<details>
+<summary>答案</summary>
+
+```python
+import re
+
+pattern = re.compile(
+    r'(?P<time>\w+\s+\d+\s+\d+:\d+:\d+)\s+'
+    r'(?P<host>\S+)\s+'
+    r'(?P<process>\S+?)(?:\[\d+\])?:\s*'
+    r'.*?(?:error|fail)',
+    re.IGNORECASE
+)
+
+with open("/var/log/syslog") as f:
+    for line in f:
+        m = pattern.search(line)
+        if m:
+            print(f"{m['time']} {m['process']}: {line.strip()}")
 ```
+</details>
 
-### 练习 2：安全日志监控
+---
 
-```bash
-#!/bin/bash
-echo "暴力破解 (过去 1 小时):"
-grep "Failed password" /var/log/auth.log | \
-    awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | \
-    awk '$1 > 5 {printf "  IP: %-15s 失败: %d\n", $2, $1}'
+## 🧪 练习题
 
-echo "非工作时间登录:"
-grep "Accepted" /var/log/auth.log | \
-    awk -F'[ :]' '{if ($4 >= 22 || $4 < 6) print "  "$0}'
+### 练习 1：手机号提取
+
+从文本中提取所有中国手机号（11 位数字，1 开头）。
+
+<details>
+<summary>答案</summary>
+
+```python
+import re
+pattern = re.compile(r'1[3-9]\d{9}')
+phones = pattern.findall(text)
 ```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+</details>
 
 ---
 
-## 📝 笔记
+## 📚 扩展阅读
 
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 13:36:48*  
-*Generated by Hermes Agent with review*
+- [regex101.com 在线测试](https://regex101.com/)
+- [Python re 文档](https://docs.python.org/3/library/re.html)

@@ -71,7 +71,32 @@ CLI 工具开发 是 SRE 工程师必须掌握的重要技能。
 
 ---
 
-### 4. 扩展阅读
+## 🧪 练习题
+
+### 练习 1：给 CLI 工具添加 --json 选项
+
+让工具支持 JSON 格式输出。
+
+<details>
+<summary>答案</summary>
+
+```python
+import json
+
+@click.option("--json", "as_json", is_flag=True)
+def list_servers(as_json):
+    servers = get_servers()
+    if as_json:
+        click.echo(json.dumps(servers, indent=2))
+    else:
+        for s in servers:
+            click.echo(f"  {s['name']} {s['ip']}")
+```
+</details>
+
+---
+
+## 📚 扩展阅读
 
 - 查阅官方文档获取最准确的信息
 - 参考相关技术博客和教程

@@ -1,29 +1,23 @@
 # Day 97: ConfigMap 与 Secret
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：ConfigMap 与 Secret  
+> 📅 日期：2026-05-03
+> 📖 学习主题：ConfigMap 与 Secret
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 97 的学习后，你应该掌握：
-- 理解 ConfigMap 与 Secret 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解配置与代码分离的原则
+- 掌握 ConfigMap 和 Secret 的使用
 
 ---
 
-## 📖 详细知识点
+## 📖 配置管理
 
-### 1. ConfigMap 与 Secret
-
-#### 1.1 ConfigMap — 配置管理
+### 1. ConfigMap
 
 ```yaml
-# 创建 ConfigMap
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -31,40 +25,32 @@ metadata:
 data:
   APP_ENV: production
   LOG_LEVEL: info
-  DATABASE_HOST: mysql.default.svc.cluster.local
-  DATABASE_PORT: "3306"
-  # 也可以用文件形式
-  nginx.conf: |
-    server {
-        listen 80;
-        location / {
-            proxy_pass http://backend:8080;
-        }
-    }
+  database.conf: |
+    host=db
+    port=3306
 ```
 
-**使用 ConfigMap**：
+使用方式：
 ```yaml
-# 作为环境变量
-spec:
-  containers:
-  - name: app
-    image: myapp:v1
-    envFrom:
-    - configMapRef:
+# 环境变量
+env:
+  - name: APP_ENV
+    valueFrom:
+      configMapKeyRef:
         name: app-config
+        key: APP_ENV
 
-# 作为文件挂载
-    volumeMounts:
-    - name: config
-      mountPath: /etc/nginx/conf.d
-  volumes:
+# 挂载为文件
+volumeMounts:
+  - name: config
+    mountPath: /etc/config
+volumes:
   - name: config
     configMap:
       name: app-config
 ```
 
-#### 1.2 Secret — 敏感信息
+### 2. Secret
 
 ```yaml
 apiVersion: v1
@@ -73,158 +59,20 @@ metadata:
   name: db-credentials
 type: Opaque
 data:
-  username: YWRtaW4=          # base64 编码的 "admin"
-  password: cGFzc3dvcmQxMjM=   # base64 编码的 "password123"
-stringData:                      # 自动 base64 编码
-  api-key: sk-xxxxxxxxxxxx
-```
-
-**使用 Secret**：
-```yaml
-spec:
-  containers:
-  - name: app
-    env:
-    - name: DB_USER
-      valueFrom:
-        secretKeyRef:
-          name: db-credentials
-          key: username
-    - name: DB_PASS
-      valueFrom:
-        secretKeyRef:
-          name: db-credentials
-          key: password
-```
-
-### 2. RBAC — 最小权限访问 Secret
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: production
-  name: secret-reader
-rules:
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["get"]  # 只能读取，不能 list/watch/modify
-```
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：部署完整应用
-
-```yaml
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    metadata:
-      labels:
-        app: web-app
-    spec:
-      containers:
-      - name: web-app
-        image: myapp:latest
-        ports:
-        - containerPort: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
+  username: YWRtaW4=    # base64
+  password: c2VjcmV0MTIz
 ```
 
 ```bash
-kubectl apply -f deployment.yaml
-kubectl get pods -w
-kubectl rollout status deployment/web-app
-kubectl rollout undo deployment/web-app  # 回滚
+# 创建
+kubectl create secret generic db-credentials \
+    --from-literal=username=admin \
+    --from-literal=password=secret123
 ```
 
-
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:20*  
-*Generated by Hermes Agent with review*
+- [ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/)
+- [Secret](https://kubernetes.io/docs/concepts/configuration/secret/)

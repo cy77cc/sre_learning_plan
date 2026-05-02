@@ -71,7 +71,35 @@
 
 ---
 
-### 4. 扩展阅读
+## 🧪 练习题
+
+### 练习 1：数据库迁移脚本
+
+编写一个脚本，将 SQLite 数据库中的数据导出为 CSV 文件。
+
+<details>
+<summary>答案</summary>
+
+```python
+import sqlite3
+import csv
+
+conn = sqlite3.connect("sre_data.db")
+cursor = conn.cursor()
+cursor.execute("SELECT * FROM servers")
+
+with open("servers.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow([d[0] for d in cursor.description])
+    writer.writerows(cursor.fetchall())
+
+conn.close()
+```
+</details>
+
+---
+
+## 📚 扩展阅读
 
 - 查阅官方文档获取最准确的信息
 - 参考相关技术博客和教程

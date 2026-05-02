@@ -1,240 +1,301 @@
-# Day 77: Docker 镜像基础
+     1|# Day 77: Docker 镜像基础
+     2|
+     3|> 📅 日期：2026-05-03
+     4|> 📖 学习主题：Docker 镜像基础
+     5|> ⏰ 计划学习时间：2-3 小时
+     6|
+     7|---
+     8|
+     9|## 🎯 学习目标
+    10|
+    11|- 理解 Docker 镜像的分层存储机制
+    12|- 掌握镜像的拉取、查看、删除操作
+    13|- 能构建自定义镜像
+    14|- 理解镜像标签和版本管理
+    15|
+    16|---
+    17|
+    18|## 📖 详细知识点
+    19|
+    20|### 1. 镜像分层存储
+    21|
+    22|```
+    23|Docker 镜像由多层只读层叠加而成：
+    24|
+    25|FROM ubuntu:22.04          ← 基础层 (~77MB)
+    26|RUN apt update             ← 层 2
+    27|RUN apt install -y python3 ← 层 3
+    28|COPY app.py /app/          ← 层 4
+    29|CMD ["python3", "/app/app.py"] ← 层 5
+    30|
+    31|优势：
+    32|- 层可复用：多个镜像共享相同基础层
+    33|- 节省存储：相同层只存一份
+    34|- 加速构建：未变化的层使用缓存
+    35|- 缓存失效：某层变化后，后续所有层重新构建
+    36|```
+    37|
+    38|### 2. 镜像操作命令
+    39|
+    40|```bash
+    41|# 拉取镜像
+    42|docker pull python:3.11-slim
+    43|docker pull nginx:latest
+    44|docker pull redis:7-alpine
+    45|
+    46|# 查看本地镜像
+    47|docker images
+    48|docker images -a          # 包含中间层
+    49|docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+    50|
+    51|# 搜索镜像
+    52|docker search nginx
+    53|docker search --filter "is-official=true" python
+    54|
+    55|# 查看镜像详情
+    56|docker inspect python:3.11-slim
+    57|docker history python:3.11-slim
+    58|
+    59|# 删除镜像
+    60|docker rmi python:3.11-slim
+    61|docker rmi $(docker images -q)    # 删除所有
+    62|
+    63|# 清理未使用的镜像
+    64|docker system prune -a
+    65|docker system df
+    66|```
+    67|
+    68|### 3. 镜像标签与版本
+    69|
+    70|```
+    71|镜像命名规范：
+    72|  [registry/][namespace/]name[:tag]
+    73|
+    74|示例：
+    75|  nginx:latest            ← Docker Hub 官方镜像
+    76|  myuser/myapp:v1.2.3     ← 用户自定义镜像
+    77|  registry.example.com/myapp:v1  ← 私有仓库
+    78|
+    79|常用标签约定：
+    80|  latest      ← 最新稳定版（不推荐用于生产）
+    81|  1.0         ← 主版本
+    82|  1.0.3       ← 具体版本
+    83|  alpine      ← 基于 Alpine 的精简版
+    84|  slim        ← 基于 Debian slim 的精简版
+    85|```
+    86|
+    87|### 4. 镜像大小对比
+    88|
+    89|| 镜像 | 大小 | 说明 |
+    90||------|------|------|
+    91|| ubuntu:22.04 | ~77MB | 完整 Ubuntu |
+    92|| debian:bookworm-slim | ~80MB | 精简 Debian |
+    93|| alpine:3.18 | ~7MB | 极简 Linux |
+    94|| python:3.11 | ~920MB | 完整 Python |
+    95|| python:3.11-slim | ~120MB | 精简 Python |
+    96|| python:3.11-alpine | ~50MB | Alpine Python |
+    97|
+    98|### 5. 仓库操作
+    99|
+   100|```bash
+   101|# 登录
+   102|docker login
+   103|docker login registry.example.com
+   104|
+   105|# 打标签
+   106|docker tag myapp:v1 myuser/myapp:v1
+   107|
+   108|# 推送
+   109|docker push myuser/myapp:v1
+   110|
+   111|# 推送私有仓库
+   112|docker tag myapp:v1 registry.example.com/myapp:v1
+   113|docker push registry.example.com/myapp:v1
+   114|
+   115|# 导出/导入
+   116|docker save myapp:v1 -o myapp.tar
+   117|docker load -i myapp.tar
+   118|```
+   119|
+   120|### 6. 构建缓存与优化
+   121|
+   122|```bash
+   123|# 不使用缓存
+   124|docker build --no-cache -t myapp:v2 .
+   125|
+   126|# 使用构建参数
+   127|docker build --build-arg VERSION=1.2.3 -t myapp:v1.2.3 .
+   128|
+   129|# BuildKit
+   130|DOCKER_BUILDKIT=1 docker build -t myapp:v1 .
+   131|```
+   132|
+   133|### 7. 实战：构建 Python 应用镜像
+   134|
+   135|```dockerfile
+   136|FROM python:3.11-slim
+   137|
+   138|LABEL maintainer="sre@example.com"
+   139|
+   140|ENV PYTHONDONTWRITEBYTECODE=1
+   141|ENV PYTHONUNBUFFERED=1
+   142|
+   143|WORKDIR /app
+   144|
+   145|COPY requirements.txt .
+   146|RUN pip install --no-cache-dir -r requirements.txt
+   147|
+   148|COPY . .
+   149|
+   150|RUN useradd -r -s /bin/false appuser
+   151|RUN chown -R appuser:appuser /app
+   152|
+   153|USER appuser
+   154|
+   155|EXPOSE 8080
+   156|
+   157|HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+   158|    CMD curl -f http://localhost:8080/health || exit 1
+   159|
+   160|CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0"]
+   161|```
+   162|
+   163|---
+   164|
+   165|## 🧪 练习题
+   166|
+   167|### 练习 1：镜像瘦身
+   168|
+   169|优化以下 Dockerfile：
+   170|```dockerfile
+   171|FROM ubuntu:22.04
+   172|RUN apt-get update && apt-get install -y python3 python3-pip gcc
+   173|RUN pip3 install flask gunicorn
+   174|COPY . /app
+   175|```
+   176|
+   177|<details>
+   178|<summary>答案</summary>
+   179|
+   180|```dockerfile
+   181|FROM python:3.11-slim
+   182|COPY requirements.txt .
+   183|RUN pip install --no-cache-dir -r requirements.txt
+   184|COPY . /app
+   185|EXPOSE 5000
+   186|CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+   187|```
+   188|</details>
+   189|
+   190|---
+   191|
+   192|## 📚 扩展阅读
+   193|
+   194|- [Docker 镜像文档](https://docs.docker.com/engine/reference/commandline/images/)
+   195|- [多阶段构建](https://docs.docker.com/build/building/multi-stage/)
+   196|
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Docker 镜像基础  
-> ⏰ 计划学习时间：2-3 小时
+## 🏗️ 实战：镜像瘦身与优化
 
----
-
-## 🎯 学习目标
-
-完成 Day 77 的学习后，你应该掌握：
-- 理解 Docker 镜像基础 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
-
----
-
-## 📖 详细知识点
-
-### 1. Docker 镜像原理
-
-#### 1.1 镜像分层存储
-
-Docker 镜像由多个只读层（layer）叠加而成：
+### 镜像瘦身前后对比
 
 ```
-Layer 1: ubuntu:22.04 基础系统 (~77MB)
-Layer 2: apt install nginx (~30MB)
-Layer 3: COPY config/nginx.conf (~1KB)
-Layer 4: COPY app/ (~10MB)
+优化前（~900MB）：
+FROM python:3.11
+RUN apt-get update && apt-get install -y gcc
+COPY . /app
+RUN pip install -r requirements.txt
 
-最终镜像 = Layer 1 + Layer 2 + Layer 3 + Layer 4
-
-优势：
-- 层缓存：修改 Layer 4 时，Layer 1-3 无需重建
-- 共享：多个镜像可共享相同的基础层
-- 增量拉取：pull 时只下载缺少的层
-```
-
-```bash
-# 查看镜像层
-docker image history nginx:latest
-
-# 查看层详情
-docker inspect nginx:latest
-
-# 导出/导入镜像
-docker save nginx:latest > nginx.tar
-docker load < nginx.tar
-```
-
-#### 1.2 Dockerfile 基础指令
-
-```dockerfile
-# FROM: 指定基础镜像
-FROM ubuntu:22.04
-
-# RUN: 构建时执行（生成新层）
-RUN apt update && apt install -y nginx
-
-# COPY: 复制文件到镜像
-COPY config/nginx.conf /etc/nginx/nginx.conf
-
-# WORKDIR: 设置工作目录
-WORKDIR /app
-
-# EXPOSE: 声明端口（文档作用）
-EXPOSE 80
-
-# CMD: 容器启动时执行（可被覆盖）
-CMD ["nginx", "-g", "daemon off;"]
-```
-
-### 2. 构建第一个镜像
-
-```dockerfile
-# Dockerfile
+优化后（~120MB）：
 FROM python:3.11-slim
-
-WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-EXPOSE 8000
-
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
+COPY . /app
 ```
 
-```bash
-# 构建镜像
-docker build -t myapp:latest .
-
-# 运行容器
-docker run -d -p 8000:8000 --name myapp myapp:latest
-
-# 检查
-docker exec myapp curl http://localhost:8000/health
-```
-
-### 3. 镜像管理
-
-```bash
-# 标签
-docker tag myapp:latest myregistry.com/myapp:v1.0
-
-# 推送到仓库
-docker push myregistry.com/myapp:v1.0
-
-# 搜索
-docker search nginx
-
-# 清理
-docker image prune        # 清理悬空镜像
-docker image prune -a     # 清理所有未使用的镜像
-docker image rm $(docker image ls -q)  # 删除所有
-```
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：多阶段构建优化
+### 多阶段构建实战
 
 ```dockerfile
-# Build stage
+# Go 应用
 FROM golang:1.21 AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /server .
 
-# Runtime stage
 FROM alpine:3.18
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
+RUN apk --no-cache add ca-certificates tzdata
+COPY --from=builder /server /server
+USER nobody
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
+HEALTHCHECK --interval=10s --timeout=3s \
     CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
+ENTRYPOINT ["/server"]
 ```
 
-### 练习 2：docker-compose 编排
+### 构建缓存详解
 
-```yaml
-version: "3.8"
-services:
-  web:
-    build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
-    environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
-  db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-volumes:
-  pgdata:
+```
+Docker 构建缓存机制：
+1. 每条 Dockerfile 指令创建一层
+2. 如果指令和上下文未变，使用缓存
+3. 某层缓存失效后，后续所有层重新构建
+4. COPY/ADD 指令检查文件内容 hash
+
+优化策略：
+- 将不变的指令放前面（FROM, ENV, WORKDIR）
+- 将经常变化的指令放后面（COPY .）
+- 先复制依赖文件，安装依赖，再复制代码
 ```
 
+### .dockerignore
+
+```
+# .dockerignore 文件
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+tests/
+*.md
+Dockerfile
+.dockerignore
+node_modules/
+```
+
+## 🧪 练习题
+
+### 练习 1：分析镜像层
+
+<details>
+<summary>答案</summary>
+
+```bash
+docker history nginx:latest
+docker history --no-trunc nginx:latest
+docker inspect nginx:latest | grep -A 20 "RootFS"
+```
+</details>
+
+### 练习 2：构建多架构镜像
+
+<details>
+<summary>答案</summary>
+
+```bash
+docker buildx create --use
+docker buildx build --platform linux/amd64,linux/arm64 -t myapp:v1 --push .
+```
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:18*  
-*Generated by Hermes Agent with review*
+- [Docker 镜像文档](https://docs.docker.com/engine/reference/commandline/images/)
+- [多阶段构建](https://docs.docker.com/build/building/multi-stage/)
+- [Docker Hub 官方镜像](https://hub.docker.com/)

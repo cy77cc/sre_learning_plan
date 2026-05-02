@@ -71,7 +71,34 @@
 
 ---
 
-### 4. 扩展阅读
+## 🧪 练习题
+
+### 练习 1：并发下载器
+
+用 ThreadPoolExecutor 并发下载 10 个文件。
+
+<details>
+<summary>答案</summary>
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+import requests
+
+def download(url):
+    r = requests.get(url)
+    with open(url.split("/")[-1], "wb") as f:
+        f.write(r.content)
+    return url
+
+urls = [f"https://example.com/file{i}.txt" for i in range(10)]
+with ThreadPoolExecutor(max_workers=5) as ex:
+    results = list(ex.map(download, urls))
+```
+</details>
+
+---
+
+## 📚 扩展阅读
 
 - 查阅官方文档获取最准确的信息
 - 参考相关技术博客和教程

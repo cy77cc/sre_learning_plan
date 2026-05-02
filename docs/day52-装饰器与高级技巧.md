@@ -1,188 +1,218 @@
-# Day 52: 装饰器与高级技巧
+# Day 52: Python 装饰器与高级技巧
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：装饰器与高级技巧  
+> 📅 日期：2026-05-02
+> 📖 学习主题：Python 装饰器与高级技巧
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 52 的学习后，你应该掌握：
-- 理解 装饰器与高级技巧 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解装饰器的原理和编写方法
+- 掌握上下文管理器、生成器、迭代器
+- 能在 SRE 工具中应用高级 Python 特性
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 装饰器与高级技巧
-
-#### 1. 基础知识
-
-Python 是 SRE 最常用的脚本语言之一。
-
-#### 2. 核心概念
-
-- 变量和数据结构（列表、字典、元组、集合）
-- 控制流程（if/for/while）
-- 函数和模块
-- 异常处理（try/except）
-- 文件和 I/O 操作
+### 1. 装饰器原理
 
 ```python
-# 示例：读取配置文件
-import json
+import functools
+import time
 
-with open('config.json') as f:
-    config = json.load(f)
+def timer(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        elapsed = time.time() - start
+        print(f"{func.__name__} took {elapsed:.3f}s")
+        return result
+    return wrapper
 
-print(f"Server: {config['host']}:{config['port']}")
+@timer
+def slow_function():
+    time.sleep(1)
+    return "done"
 ```
 
-#### 3. SRE 实战
+### 2. 带参数的装饰器
 
-- 主机监控脚本（psutil 库）
-- 日志分析工具
-- API 调用（requests 库）
+```python
+def retry(max_attempts=3, delay=1, exceptions=(Exception,)):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    if attempt == max_attempts - 1:
+                        raise
+                    time.sleep(delay * (2 ** attempt))
+            return None
+        return wrapper
+    return decorator
 
-#### 4. 练习
+@retry(max_attempts=3, delay=2)
+def fetch_api(url):
+    return requests.get(url).json()
+```
 
-- 编写 Python 脚本监控系统资源
-- 解析 JSON 配置文件
-- 调用 REST API
+### 3. 生成器
 
+```python
+# 惰性求值，节省内存
+def read_large_file(filepath):
+    with open(filepath) as f:
+        for line in f:
+            yield line.strip()
+
+# 使用
+for line in read_large_file("/var/log/syslog"):
+    if "ERROR" in line:
+        process(line)
+
+# 生成器表达式
+total = sum(x*x for x in range(1000000))  # 不占用大量内存
+```
+
+### 4. 上下文管理器
+
+```python
+from contextlib import contextmanager
+
+@contextmanager
+def temp_dir():
+    path = tempfile.mkdtemp()
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path)
+
+with temp_dir() as d:
+    # 使用临时目录
+    # 退出时自动清理
+    pass
+```
+
+### 5. LRU 缓存
+
+```python
+from functools import lru_cache
+
+@lru_cache(maxsize=128)
+def dns_lookup(hostname):
+    """Cache DNS lookups to avoid repeated queries."""
+    import socket
+    return socket.gethostbyname(hostname)
+
+# 查看缓存统计
+dns_lookup.cache_info()
+# CacheInfo(hits=42, misses=10, maxsize=128, currsize=10)
+```
 
 ---
 
-## 💻 实战练习
-
-### 练习 1：主机监控脚本
+## 🏗️ 实战：带缓存和重试的 API 客户端
 
 ```python
 #!/usr/bin/env python3
-import psutil, json, datetime
+"""API client with caching, retry, and timing."""
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
-        try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
+import time
+import functools
+import requests
+from functools import lru_cache
 
-data = check_system()
-print(json.dumps(data, indent=2))
 
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+def timer(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = func(*args, **kwargs)
+        elapsed = time.time() - start
+        print(f"{func.__name__}: {elapsed:.3f}s")
+        return result
+    return wrapper
+
+
+def retry(max_attempts=3, delay=1):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_attempts - 1:
+                        raise
+                    time.sleep(delay * (2 ** attempt))
+            return None
+        return wrapper
+    return decorator
+
+
+class APIClient:
+    def __init__(self, base_url):
+        self.base_url = base_url
+        self.session = requests.Session()
+
+    @timer
+    @retry(max_attempts=3)
+    def get(self, endpoint, cache=True):
+        url = f"{self.base_url}/{endpoint}"
+        resp = self.session.get(url, timeout=5)
+        resp.raise_for_status()
+        return resp.json()
+
+
+client = APIClient("https://api.example.com")
+data = client.get("users/1")
 ```
 
-### 练习 2：日志分析工具
+---
+
+## 🧪 练习题
+
+### 练习 1：编写一个限流装饰器
+
+限制函数每分钟最多调用 N 次。
+
+<details>
+<summary>答案</summary>
 
 ```python
-import re
-from collections import Counter
+import time
+from collections import deque
 
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
+def rate_limit(max_calls, period=60):
+    def decorator(func):
+        calls = deque()
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            now = time.time()
+            while calls and calls[0] < now - period:
+                calls.popleft()
+            if len(calls) >= max_calls:
+                raise Exception("Rate limit exceeded")
+            calls.append(now)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
-analyze_nginx_log("/var/log/nginx/access.log")
+@rate_limit(max_calls=5, period=60)
+def api_call():
+    pass
 ```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+</details>
 
 ---
 
-## 📝 笔记
+## 📚 扩展阅读
 
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 13:37:03*  
-*Generated by Hermes Agent with review*
+- [Python 装饰器教程](https://realpython.com/primer-on-python-decorators/)
+- [生成器与迭代器文档](https://docs.python.org/3/howto/functional.html#generators)
+- [contextlib 文档](https://docs.python.org/3/library/contextlib.html)

@@ -1,226 +1,166 @@
-# Day 80: Docker 数据管理
+     1|# Day 80: Docker 数据管理
+     2|
+     3|> 📅 日期：2026-05-03
+     4|> 📖 学习主题：Docker 数据管理
+     5|> ⏰ 计划学习时间：2-3 小时
+     6|
+     7|---
+     8|
+     9|## 🎯 学习目标
+    10|
+    11|- 理解 Volume vs Bind Mount vs tmpfs
+    12|- 掌握 Docker Volume 的创建和管理
+    13|- 能正确持久化容器数据
+    14|
+    15|---
+    16|
+    17|## 📖 数据存储方式
+    18|
+    19|| 类型 | 存储位置 | 持久化 | 性能 | 适用场景 |
+    20||------|---------|--------|------|---------|
+    21|| Volume | Docker 管理 | ✅ | 高 | 数据库、应用数据 |
+    22|| Bind Mount | 宿主机路径 | ✅ | 高 | 开发时挂载代码 |
+    23|| tmpfs | 内存 | ❌ | 最高 | 临时数据、缓存 |
+    24|
+    25|### 1. Docker Volume
+    26|
+    27|```bash
+    28|docker volume create mydata
+    29|docker volume ls
+    30|docker volume inspect mydata
+    31|docker run -v mydata:/var/lib/mysql mysql
+    32|docker volume rm mydata
+    33|docker volume prune
+    34|```
+    35|
+    36|### 2. Bind Mount
+    37|
+    38|```bash
+    39|docker run -v /host/path:/container/path nginx
+    40|docker run -v /host/path:/container/path:ro nginx
+    41|docker run -v /host/nginx.conf:/etc/nginx/nginx.conf nginx
+    42|```
+    43|
+    44|### 3. tmpfs
+    45|
+    46|```bash
+    47|docker run --tmpfs /tmp nginx
+    48|docker run --tmpfs /tmp:rw,size=100m nginx
+    49|```
+    50|
+    51|### 4. 备份与恢复
+    52|
+    53|```bash
+    54|# 备份
+    55|docker run --rm -v mydata:/data -v $(pwd):/backup alpine \
+    56|    tar czf /backup/mydata-backup.tar.gz -C /data .
+    57|
+    58|# 恢复
+    59|docker run --rm -v mydata:/data -v $(pwd):/backup alpine \
+    60|    tar xzf /backup/mydata-backup.tar.gz -C /data
+    61|```
+    62|
+    63|### 5. docker-compose 示例
+    64|
+    65|```yaml
+    66|version: '3.8'
+    67|services:
+    68|  mysql:
+    69|    image: mysql:8.0
+    70|    environment:
+    71|      MYSQL_ROOT_PASSWORD: secret
+    72|    volumes:
+    73|      - mysql_data:/var/lib/mysql
+    74|    ports:
+    75|      - "3306:3306"
+    76|
+    77|  redis:
+    78|    image: redis:7-alpine
+    79|    volumes:
+    80|      - redis_data:/data
+    81|
+    82|volumes:
+    83|  mysql_data:
+    84|  redis_data:
+    85|```
+    86|
+    87|---
+    88|
+    89|## 📚 扩展阅读
+    90|
+    91|- [Docker 存储文档](https://docs.docker.com/storage/)
+    92|- [Volume vs Bind Mount](https://docs.docker.com/storage/volumes/)
+    93|
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Docker 数据管理  
-> ⏰ 计划学习时间：2-3 小时
-
----
-
-## 🎯 学习目标
-
-完成 Day 80 的学习后，你应该掌握：
-- 理解 Docker 数据管理 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
-
----
-
-## 📖 详细知识点
-
-### 1. Docker 数据管理
-
-#### 1.1 三种存储方式
-
-```
-┌─────────────────────────────────────────────┐
-│  Docker Host                                │
-│                                             │
-│  ┌─────────┐    ┌──────────┐  ┌──────────┐ │
-│  │ 容器    │    │  容器     │  │ 容器     │ │
-│  │ /data   │    │ /data    │  │ /tmp     │ │
-│  └────┬────┘    └────┬─────┘  └──────────┘ │
-│       │              │                      │
-│  ┌────▼────┐    ┌────▼─────┐                │
-│  │Bind     │    │Volume    │                │
-│  │Mount    │    │          │                │
-│  │/host/   │    │/var/lib/ │                │
-│  │data/    │    │docker/   │                │
-│  └─────────┘    │volumes/  │                │
-│                 └──────────┘                │
-│                                             │
-│  tmpfs: 存储在宿主内存中，容器停止即消失       │
-└─────────────────────────────────────────────┘
-```
-
-| 类型 | 位置 | 持久化 | 跨容器共享 | 适用场景 |
-|------|------|--------|-----------|---------|
-| **Volume** | /var/lib/docker/volumes/ | ✅ | ✅ | 数据库、持久化数据 |
-| **Bind Mount** | 宿主机任意路径 | ✅ | ✅ | 开发、配置文件 |
-| **tmpfs** | 宿主内存 | ❌ | ❌ | 临时敏感数据 |
-
-### 2. Volume 操作
+## 6. 权限问题
 
 ```bash
-# 创建
-docker volume create redis-data
+# 用户映射
+docker run -v /host/data:/data -u $(id -u):$(id -g) myapp
 
-# 查看
-docker volume ls
-docker volume inspect redis-data
-
-# 使用
-docker run -d \
-    --name mysql \
-    -v mysql-data:/var/lib/mysql \
-    -e MYSQL_ROOT_PASSWORD=root123 \
-    mysql:8
-
-# 验证数据持久化
-docker rm -f mysql
-docker run -d \
-    --name mysql-new \
-    -v mysql-data:/var/lib/mysql \
-    -e MYSQL_ROOT_PASSWORD=root123 \
-    mysql:8
-# 数据完整保留！
-
-# 备份
-docker run --rm \
-    -v mysql-data:/data:ro \
-    -v $(pwd):/backup \
-    alpine tar czf /backup/mysql-backup.tar.gz -C /data .
-
-# 恢复
-docker run --rm \
-    -v mysql-data:/data \
-    -v $(pwd):/backup \
-    alpine tar xzf /backup/mysql-backup.tar.gz -C /data
-
-# 清理
-docker volume prune  # 清理未使用的 volume
+# 修复权限
+docker run --rm -v mydata:/data alpine chown -R 1000:1000 /data
 ```
 
-### 3. Bind Mount
+## 7. Volume 驱动
 
 ```bash
-# 挂载配置文件
-docker run -d \
-    --name nginx \
-    -v /etc/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
-    -v /var/www/html:/usr/share/nginx/html:ro \
-    -p 80:80 \
-    nginx:alpine
-
-# :ro 表示只读（安全最佳实践）
+docker volume create --driver local \
+    --opt type=nfs \
+    --opt o=addr=10.0.1.100,rw \
+    --opt device=:/exports/data \
+    nfs_volume
 ```
 
-
----
-
-## 💻 实战练习
-
-### 练习 1：多阶段构建优化
-
-```dockerfile
-# Build stage
-FROM golang:1.21 AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
-
-# Runtime stage
-FROM alpine:3.18
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
-```
-
-### 练习 2：docker-compose 编排
+## 8. 完整 docker-compose
 
 ```yaml
-version: "3.8"
+version: '3.8'
 services:
-  web:
-    build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
+  mysql:
+    image: mysql:8.0
     environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
-  db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: myapp
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+
   redis:
     image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  app:
+    build: .
+    environment:
+      - DB_HOST=mysql
+      - REDIS_HOST=redis
+    volumes:
+      - app_logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
 volumes:
-  pgdata:
+  mysql_data:
+  redis_data:
+  app_logs:
 ```
 
-
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:19*  
-*Generated by Hermes Agent with review*
+- [Docker 存储文档](https://docs.docker.com/storage/)
+- [Volume vs Bind Mount](https://docs.docker.com/storage/volumes/)

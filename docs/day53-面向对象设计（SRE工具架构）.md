@@ -1,188 +1,220 @@
-# Day 53: 面向对象设计（SRE 工具架构）
+# Day 53: Python 面向对象设计与 SRE 工具架构
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：面向对象设计（SRE 工具架构）  
+> 📅 日期：2026-05-02
+> 📖 学习主题：Python 面向对象设计与 SRE 工具架构
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 53 的学习后，你应该掌握：
-- 理解 面向对象设计（SRE 工具架构） 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 OOP 四大原则在 SRE 工具中的应用
+- 掌握类、继承、组合、抽象类
+- 能设计可扩展的运维工具架构
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 面向对象设计（SRE 工具架构）
-
-#### 1. 基础知识
-
-Python 是 SRE 最常用的脚本语言之一。
-
-#### 2. 核心概念
-
-- 变量和数据结构（列表、字典、元组、集合）
-- 控制流程（if/for/while）
-- 函数和模块
-- 异常处理（try/except）
-- 文件和 I/O 操作
+### 1. 类与对象
 
 ```python
-# 示例：读取配置文件
-import json
+class Server:
+    def __init__(self, hostname, ip, role):
+        self.hostname = hostname
+        self.ip = ip
+        self.role = role
+        self._metrics = {}
 
-with open('config.json') as f:
-    config = json.load(f)
+    @property
+    def address(self):
+        return f"{self.hostname} ({self.ip})"
 
-print(f"Server: {config['host']}:{config['port']}")
+    def check_health(self):
+        raise NotImplementedError
+
+    def __repr__(self):
+        return f"Server({self.hostname}, {self.ip})"
 ```
 
-#### 3. SRE 实战
+### 2. 继承与组合
 
-- 主机监控脚本（psutil 库）
-- 日志分析工具
-- API 调用（requests 库）
+```python
+# 继承
+class WebServer(Server):
+    def __init__(self, hostname, ip, port=80):
+        super().__init__(hostname, ip, "web")
+        self.port = port
 
-#### 4. 练习
+    def check_health(self):
+        resp = requests.get(f"http://{self.ip}:{self.port}/health")
+        return resp.status_code == 200
 
-- 编写 Python 脚本监控系统资源
-- 解析 JSON 配置文件
-- 调用 REST API
+# 组合（优于继承）
+class HealthChecker:
+    def __init__(self, server, checker):
+        self.server = server
+        self.checker = checker
 
+    def run(self):
+        return self.checker.check(self.server)
+```
+
+### 3. 抽象基类
+
+```python
+from abc import ABC, abstractmethod
+
+class Monitor(ABC):
+    @abstractmethod
+    def collect(self):
+        pass
+
+    @abstractmethod
+    def alert(self):
+        pass
+
+class CPUMonitor(Monitor):
+    def collect(self):
+        return psutil.cpu_percent()
+
+    def alert(self):
+        if self.collect() > 90:
+            send_alert("CPU usage > 90%")
+```
+
+### 4. 数据类（Python 3.7+）
+
+```python
+from dataclasses import dataclass, field
+from typing import List
+
+@dataclass
+class ServerConfig:
+    hostname: str
+    ip: str
+    ports: List[int] = field(default_factory=lambda: [80, 443])
+    tags: List[str] = field(default_factory=list)
+
+    @property
+    def address(self):
+        return f"{self.hostname}:{self.ports[0]}"
+
+config = ServerConfig("web01", "10.0.1.10")
+```
 
 ---
 
-## 💻 实战练习
-
-### 练习 1：主机监控脚本
+## 🏗️ 实战：可插拔监控系统
 
 ```python
 #!/usr/bin/env python3
-import psutil, json, datetime
+"""Pluggable monitoring system using OOP."""
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
-        try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
+from abc import ABC, abstractmethod
+from typing import Dict, List
+import psutil
 
-data = check_system()
-print(json.dumps(data, indent=2))
 
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+class MetricCollector(ABC):
+    @abstractmethod
+    def collect(self) -> Dict[str, float]:
+        pass
+
+
+class CPUCollector(MetricCollector):
+    def collect(self):
+        return {"cpu_percent": psutil.cpu_percent(interval=1)}
+
+
+class MemoryCollector(MetricCollector):
+    def collect(self):
+        mem = psutil.virtual_memory()
+        return {
+            "memory_percent": mem.percent,
+            "memory_available_mb": mem.available / 1024 / 1024,
+        }
+
+
+class DiskCollector(MetricCollector):
+    def collect(self):
+        disk = psutil.disk_usage("/")
+        return {
+            "disk_percent": disk.percent,
+            "disk_free_gb": disk.free / 1024**3,
+        }
+
+
+class Monitor:
+    def __init__(self):
+        self.collectors: List[MetricCollector] = []
+
+    def register(self, collector: MetricCollector):
+        self.collectors.append(collector)
+
+    def run(self) -> Dict:
+        metrics = {}
+        for collector in self.collectors:
+            metrics.update(collector.collect())
+        return metrics
+
+
+if __name__ == "__main__":
+    monitor = Monitor()
+    monitor.register(CPUCollector())
+    monitor.register(MemoryCollector())
+    monitor.register(DiskCollector())
+
+    metrics = monitor.run()
+    for key, value in metrics.items():
+        print(f"  {key}: {value}")
 ```
 
-### 练习 2：日志分析工具
+---
+
+## 🧪 练习题
+
+### 练习 1：设计一个告警系统
+
+设计一个支持多种告警渠道（邮件、Slack、Webhook）的告警系统。
+
+<details>
+<summary>答案</summary>
 
 ```python
-import re
-from collections import Counter
+from abc import ABC, abstractmethod
 
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
+class Notifier(ABC):
+    @abstractmethod
+    def send(self, message: str):
+        pass
 
-analyze_nginx_log("/var/log/nginx/access.log")
+class EmailNotifier(Notifier):
+    def send(self, message):
+        # send email
+        pass
+
+class SlackNotifier(Notifier):
+    def send(self, message):
+        # send to Slack
+        pass
+
+class AlertManager:
+    def __init__(self):
+        self.notifiers = []
+
+    def add_notifier(self, notifier: Notifier):
+        self.notifiers.append(notifier)
+
+    def alert(self, message):
+        for n in self.notifiers:
+            n.send(message)
 ```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+</details>
 
 ---
 
-## 📝 笔记
+## 📚 扩展阅读
 
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 13:37:05*  
-*Generated by Hermes Agent with review*
+- [Python OOP 指南](https://docs.python.org/3/tutorial/classes.html)
+- [Design Patterns in Python](https://refactoring.guru/design-patterns/python)

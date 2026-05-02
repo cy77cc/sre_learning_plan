@@ -1,209 +1,117 @@
 # Day 81: Docker 网络管理
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Docker 网络管理  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Docker 网络管理
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 81 的学习后，你应该掌握：
-- 理解 Docker 网络管理 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Docker 网络驱动类型
+- 掌握 bridge、host、none 网络的区别
+- 能创建自定义网络实现容器间通信
+- 理解端口映射原理
 
 ---
 
-## 📖 详细知识点
+## 📖 Docker 网络驱动
 
-### 1. Docker 网络模式
+### 1. 网络驱动类型
 
-```
-bridge（默认）— 容器通过网桥连接，NAT 到宿主机
-host          — 容器共享宿主机网络栈
-none          — 无网络
-overlay       — 跨主机网络（Swarm/K8s）
-macvlan       — 给容器分配真实 MAC 地址
-```
+| 驱动 | 说明 | 适用场景 |
+|------|------|---------|
+| bridge | 默认驱动，容器间隔离 | 单机容器通信 |
+| host | 使用宿主机网络 | 高性能场景 |
+| none | 无网络 | 安全隔离 |
+| overlay | 跨主机网络 | Swarm 集群 |
+| macvlan | 直接分配 MAC 地址 | 需要独立 IP |
 
-#### 1.1 Bridge 网络
+### 2. Bridge 网络（默认）
 
 ```bash
-# 默认 bridge（单个容器间不能用名称通信）
-docker run -d --name web1 -p 8081:80 nginx
-docker run -d --name web2 -p 8082:80 nginx
+# 查看网络
+docker network ls
 
-# 用户定义网络（支持 DNS 名称解析）
+# 默认 bridge 网络
+docker network inspect bridge
+
+# 创建自定义 bridge 网络
 docker network create mynet
 
-docker run -d --name web1 --network mynet nginx
-docker run -d --name web2 --network mynet nginx
+# 运行容器加入网络
+docker run -d --name web --network mynet nginx
+docker run -d --name db --network mynet mysql
 
 # 容器间通过名称通信
-docker exec web1 curl http://web2:80  # ✅ 可以！
+docker exec web ping db
 ```
 
-### 2. 网络管理
+### 3. Host 网络
 
 ```bash
-# 创建网络
-docker network create \
-    --driver bridge \
-    --subnet 172.20.0.0/16 \
-    --gateway 172.20.0.1 \
-    mynet
+docker run -d --network host nginx
+# 容器直接使用宿主机 IP 和端口
+# 无需 -p 端口映射
+```
 
-# 查看
+### 4. None 网络
+
+```bash
+docker run -d --network none alpine sleep 3600
+# 容器没有网络接口（只有 lo）
+```
+
+### 5. 端口映射
+
+```bash
+# 映射到宿主机
+docker run -p 8080:80 nginx        # 宿主机:容器
+docker run -p 127.0.0.1:8080:80 nginx  # 绑定特定 IP
+docker run -p 8080:80/tcp -p 8443:443/tcp nginx
+
+# 端口范围
+docker run -p 8000-8010:8000-8010 nginx
+
+# 动态端口
+docker run -P nginx    # 自动映射到随机端口
+```
+
+### 6. DNS 与容器发现
+
+```
+自定义 bridge 网络的 DNS 特性：
+- 容器可通过名称互相解析
+- 默认 bridge 网络不支持名称解析
+- 自定义网络内置 DNS 服务器
+
+docker network create mynet
+docker run -d --name app1 --network mynet nginx
+docker run -d --name app2 --network mynet redis
+docker exec app1 ping app2    # ✅ 可解析
+```
+
+### 7. 网络故障排查
+
+```bash
+# 查看网络
 docker network ls
 docker network inspect mynet
 
-# 连接/断开
-docker network connect mynet container1
-docker network disconnect mynet container1
+# 查看容器网络
+docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' myapp
+
+# 测试连通性
+docker exec myapp ping other-container
+docker exec myapp curl http://other-container:80
+
+# 清理
+docker network prune
 ```
-
-### 3. SRE 实战：微服务网络
-
-```
-架构：前端 → API Gateway → 后端服务 → 数据库
-
-docker network create backend
-docker network create frontend
-
-# 数据库（只连 backend）
-docker run -d --name db --network backend postgres
-
-# 后端（连两个网络）
-docker run -d --name api --network backend nginx
-docker network connect frontend api
-
-# 前端（只连 frontend）
-docker run -d --name web --network frontend nginx
-
-# 隔离效果：
-# web → api ✅ （都在 frontend 网络）
-# api → db  ✅ （都在 backend 网络）
-# web → db  ❌ （无共同网络，网络隔离！）
-```
-
 
 ---
 
-## 💻 实战练习
+## 📚 扩展阅读
 
-### 练习 1：多阶段构建优化
-
-```dockerfile
-# Build stage
-FROM golang:1.21 AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
-
-# Runtime stage
-FROM alpine:3.18
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
-```
-
-### 练习 2：docker-compose 编排
-
-```yaml
-version: "3.8"
-services:
-  web:
-    build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
-    environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
-  db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-volumes:
-  pgdata:
-```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:19*  
-*Generated by Hermes Agent with review*
+- [Docker 网络文档](https://docs.docker.com/network/)
+- [Bridge 网络详解](https://docs.docker.com/network/bridge/)

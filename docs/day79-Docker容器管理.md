@@ -1,250 +1,224 @@
-# Day 79: Docker 容器管理
+     1|# Day 79: Docker 容器管理
+     2|
+     3|> 📅 日期：2026-05-03
+     4|> 📖 学习主题：Docker 容器管理
+     5|> ⏰ 计划学习时间：2-3 小时
+     6|
+     7|---
+     8|
+     9|## 🎯 学习目标
+    10|
+    11|- 掌握容器的生命周期管理
+    12|- 理解容器资源限制
+    13|- 能进入容器进行调试
+    14|- 掌握容器日志管理
+    15|
+    16|---
+    17|
+    18|## 📖 容器生命周期
+    19|
+    20|```
+    21|创建 → 运行 → 停止 → 删除
+    22|  │       │      │
+    23|  │       │      └─ docker stop (SIGTERM → 10s → SIGKILL)
+    24|  │       │
+    25|  │       ├─ docker pause (冻结进程)
+    26|  │       │
+    27|  │       └─ docker restart
+    28|```
+    29|
+    30|### 1. 基本操作
+    31|
+    32|```bash
+    33|# 创建并运行
+    34|docker run --name myapp -d -p 8080:80 nginx
+    35|
+    36|# 常用选项
+    37|docker run \
+    38|    --name myapp \
+    39|    -d \
+    40|    -p 8080:80 \
+    41|    -v /data:/app/data \
+    42|    -e DB_HOST=db \
+    43|    --restart unless-stopped \
+    44|    nginx:latest
+    45|
+    46|# 查看容器
+    47|docker ps
+    48|docker ps -a
+    49|
+    50|# 停止/启动
+    51|docker stop myapp
+    52|docker start myapp
+    53|docker restart myapp
+    54|
+    55|# 删除
+    56|docker rm myapp
+    57|docker rm -f myapp
+    58|
+    59|# 日志
+    60|docker logs myapp
+    61|docker logs -f myapp
+    62|docker logs --tail 100 myapp
+    63|
+    64|# 进入容器
+    65|docker exec -it myapp /bin/bash
+    66|docker exec myapp ls /app
+    67|```
+    68|
+    69|### 2. 资源限制
+    70|
+    71|```bash
+    72|# CPU
+    73|docker run --cpus="1.5" nginx
+    74|docker run --cpuset-cpus="0,1" nginx
+    75|
+    76|# 内存
+    77|docker run --memory="512m" nginx
+    78|
+    79|# 查看
+    80|docker stats
+    81|docker stats myapp
+    82|```
+    83|
+    84|### 3. 调试技巧
+    85|
+    86|```bash
+    87|# 查看进程
+    88|docker top myapp
+    89|
+    90|# 查看变更
+    91|docker diff myapp
+    92|
+    93|# 复制文件
+    94|docker cp myapp:/etc/nginx/nginx.conf ./
+    95|docker cp ./config myapp:/etc/nginx/
+    96|
+    97|# 暂停/恢复
+    98|docker pause myapp
+    99|docker unpause myapp
+   100|
+   101|# 导出/导入
+   102|docker export myapp > backup.tar
+   103|docker import backup.tar myimage:v1
+   104|```
+   105|
+   106|### 4. 容器网络
+   107|
+   108|```bash
+   109|docker network ls
+   110|docker network create mynet
+   111|docker run -d --name app1 --network mynet nginx
+   112|docker run -d --name app2 --network mynet redis
+   113|docker exec app1 ping app2
+   114|```
+   115|
+   116|### 5. 重启策略
+   117|
+   118|| 策略 | 说明 |
+   119||------|------|
+   120|| no | 不自动重启 |
+   121|| always | 总是重启 |
+   122|| unless-stopped | 除非手动停止 |
+   123|| on-failure | 失败时重启 |
+   124|
+   125|```bash
+   126|docker run --restart unless-stopped nginx
+   127|docker update --restart always myapp
+   128|```
+   129|
+   130|---
+   131|
+   132|## 📚 扩展阅读
+   133|
+   134|- [Docker 容器文档](https://docs.docker.com/engine/containers/)
+   135|- [Docker 资源限制](https://docs.docker.com/config/containers/resource_constraints/)
+   136|
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Docker 容器管理  
-> ⏰ 计划学习时间：2-3 小时
-
----
-
-## 🎯 学习目标
-
-完成 Day 79 的学习后，你应该掌握：
-- 理解 Docker 容器管理 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
-
----
-
-## 📖 详细知识点
-
-### 1. Docker 容器管理
-
-#### 1.1 docker run 参数详解
+## 6. 批量操作
 
 ```bash
-# 完整示例
-docker run -d \
-    --name web-server \
-    --restart unless-stopped \
-    -p 80:80 -p 443:443 \
-    -v /data/nginx/conf:/etc/nginx/conf.d \
-    -v /data/nginx/logs:/var/log/nginx \
-    --network mynet \
-    --memory 512m \
-    --cpus 1.0 \
-    -e NGINX_HOST=example.com \
-    -e NGINX_PORT=80 \
-    --health-cmd="curl -f http://localhost/health || exit 1" \
-    --health-interval=30s \
-    --health-timeout=10s \
-    --health-retries=3 \
-    nginx:alpine
-```
-
-**参数说明**：
-| 参数 | 说明 |
-|------|------|
-| `-d` | 后台运行 |
-| `--name` | 容器名称 |
-| `--restart` | 重启策略（no/always/unless-stopped/on-failure） |
-| `-p` | 端口映射（宿主机:容器） |
-| `-v` | 数据卷挂载 |
-| `--network` | 指定网络 |
-| `--memory` | 内存限制 |
-| `--cpus` | CPU 限制 |
-| `-e` | 环境变量 |
-
-#### 1.2 容器生命周期
-
-```bash
-# 启动
-docker start web-server
-
-# 停止（发送 SIGTERM，等待 10 秒后 SIGKILL）
-docker stop web-server
-
-# 立即停止
-docker kill web-server
-
-# 重启
-docker restart web-server
-
-# 暂停（冻结进程）
-docker pause web-server
-docker unpause web-server
-
-# 进入容器
-docker exec -it web-server sh
-docker exec -it web-server cat /etc/nginx/nginx.conf
-
-# 查看日志
-docker logs -f --tail 100 web-server
-docker logs --since 10m web-server
-
-# 查看资源使用
-docker stats web-server
-
-# 查看详细信息
-docker inspect web-server
-```
-
-### 2. 部署 Redis 容器
-
-```bash
-# 持久化数据
-docker run -d \
-    --name redis \
-    -p 6379:6379 \
-    -v redis-data:/data \
-    --restart unless-stopped \
-    redis:7-alpine \
-    redis-server --appendonly yes --requirepass MyPass123
-
-# 测试连接
-docker exec -it redis redis-cli -a MyPass123 ping
-
-# 查看内存
-docker exec redis redis-cli -a MyPass123 INFO memory
-```
-
-### 3. SRE 实战：容器批量管理
-
-```bash
-# 启动所有容器
-docker start $(docker ps -a -q --filter "status=exited")
-
-# 停止所有容器
+# 停止所有
 docker stop $(docker ps -q)
 
-# 删除所有已停止的容器
-docker container prune
+# 删除已停止的
+docker rm $(docker ps -aq -f status=exited)
 
-# 更新容器（重新拉取镜像并重启）
-docker pull nginx:latest
-docker stop web-server && docker rm web-server
-docker run -d --name web-server -p 80:80 nginx:latest
-
-# 查看容器日志中的错误
-docker logs --tail 50 web-server 2>&1 | grep -i "error\|fail\|panic"
+# 按名称过滤
+docker ps --filter "name=web"
+docker ps --filter "label=env=production"
 ```
 
+## 7. 启动脚本示例
 
----
+```bash
+#!/bin/bash
+set -e
 
-## 💻 实战练习
+# 创建网络
+docker network create appnet 2>/dev/null || true
 
-### 练习 1：多阶段构建优化
+# 启动 Redis
+docker run -d --name redis \
+    --network appnet \
+    --restart unless-stopped \
+    redis:7-alpine
 
-```dockerfile
-# Build stage
-FROM golang:1.21 AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
+# 启动应用
+docker run -d --name app \
+    --network appnet \
+    --restart unless-stopped \
+    -p 8080:8080 \
+    -e REDIS_HOST=redis \
+    myapp:latest
 
-# Runtime stage
-FROM alpine:3.18
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
+# 启动 Nginx
+docker run -d --name nginx \
+    --network appnet \
+    --restart unless-stopped \
+    -p 80:80 \
+    -v ./nginx.conf:/etc/nginx/nginx.conf:ro \
+    nginx:alpine
+
+echo "All services started"
+docker ps --filter "network=appnet"
 ```
 
-### 练习 2：docker-compose 编排
+## 8. 监控与告警
 
-```yaml
-version: "3.8"
-services:
-  web:
-    build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
-    environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
-  db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-volumes:
-  pgdata:
+```bash
+# 持续监控
+watch -n 2 'docker stats --no-stream'
+
+# 导出指标
+docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
+
+# 检查健康状态
+docker inspect --format='{{.State.Health.Status}}' myapp
 ```
 
+---
+
+## 🧪 练习题
+
+### 练习 1：容器调试
+
+容器启动后立刻退出，如何排查？
+
+<details>
+<summary>答案</summary>
+
+```bash
+docker ps -a          # 看退出码
+docker logs myapp     # 看日志
+docker inspect myapp  # 看详情
+docker run -it --entrypoint /bin/sh myimage  # 交互式调试
+```
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:19*  
-*Generated by Hermes Agent with review*
+- [Docker 容器文档](https://docs.docker.com/engine/containers/)
+- [Docker 资源限制](https://docs.docker.com/config/containers/resource_constraints/)

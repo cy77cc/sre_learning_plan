@@ -1,210 +1,85 @@
 # Day 92: Kubernetes Deployment
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Kubernetes Deployment  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Kubernetes Deployment
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 92 的学习后，你应该掌握：
-- 理解 Kubernetes Deployment 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Deployment 的作用
+- 掌握滚动更新和回滚
+- 能编写 Deployment YAML
 
 ---
 
-## 📖 详细知识点
+## 📖 Deployment
 
-### 1. Deployment — 管理无状态应用
+### 1. 什么是 Deployment
 
-#### 1.1 核心概念
+```
+Deployment 管理 Pod 的副本：
+- 定义期望的副本数（replicas）
+- 自动维护副本数
+- 支持滚动更新
+- 支持回滚
+```
 
-Deployment 管理 Pod 的期望状态：副本数、镜像版本、滚动更新。
+### 2. Deployment YAML
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: web-app
-  labels:
-    app: web-app
+  name: myapp
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: web-app
+      app: myapp
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1        # 最多超出 1 个 Pod
-      maxUnavailable: 1  # 最多不可用 1 个 Pod
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     metadata:
       labels:
-        app: web-app
+        app: myapp
     spec:
       containers:
-      - name: web
-        image: myapp:v1.0
-        ports:
-        - containerPort: 8080
+        - name: app
+          image: myapp:v1
+          ports:
+            - containerPort: 8080
 ```
 
-#### 1.2 滚动更新
+### 3. 滚动更新
 
 ```bash
 # 更新镜像
-kubectl set image deployment/web-app web=myapp:v2.0
+kubectl set image deployment/myapp app=myapp:v2
 
 # 查看更新状态
-kubectl rollout status deployment/web-app
-kubectl rollout history deployment/web-app
+kubectl rollout status deployment/myapp
+
+# 查看历史
+kubectl rollout history deployment/myapp
 
 # 回滚
-kubectl rollout undo deployment/web-app
-kubectl rollout undo deployment/web-app --to-revision=2
-
-# 暂停/继续更新
-kubectl rollout pause deployment/web-app
-kubectl rollout resume deployment/web-app
+kubectl rollout undo deployment/myapp
+kubectl rollout undo deployment/myapp --to-revision=2
 ```
 
-**滚动更新原理**：
-```
-期望 3 个 Pod，maxSurge=1, maxUnavailable=1:
-
-Step 1: 创建 1 个新 Pod → 4 个运行（3 旧 + 1 新）
-Step 2: 新 Pod 就绪后，终止 1 个旧 Pod → 3 个运行（2 旧 + 1 新）
-Step 3: 重复直到所有 Pod 都是新版本
-```
-
-### 2. 扩缩容
+### 4. 扩缩容
 
 ```bash
-# 手动扩缩容
-kubectl scale deployment/web-app --replicas=5
-
-# 查看 Pod 分布
-kubectl get pods -l app=web-app -o wide
+kubectl scale deployment/myapp --replicas=5
 ```
 
-
 ---
 
-## 💻 实战练习
+## 📚 扩展阅读
 
-### 练习 1：部署完整应用
-
-```yaml
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    metadata:
-      labels:
-        app: web-app
-    spec:
-      containers:
-      - name: web-app
-        image: myapp:latest
-        ports:
-        - containerPort: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
-```
-
-```bash
-kubectl apply -f deployment.yaml
-kubectl get pods -w
-kubectl rollout status deployment/web-app
-kubectl rollout undo deployment/web-app  # 回滚
-```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:20*  
-*Generated by Hermes Agent with review*
+- [Deployment 文档](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)

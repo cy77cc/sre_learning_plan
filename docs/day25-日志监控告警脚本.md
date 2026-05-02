@@ -1,7 +1,7 @@
-# Day 25: 实战项目：日志监控告警脚本
+# Day 25: 实战项目 — 日志监控告警脚本
 
-> 📅 日期：2026-04-25  
-> 📖 学习主题：实战项目：日志监控告警脚本  
+> 📅 日期：2026-04-25
+> 📖 学习主题：实战项目：日志监控告警脚本
 > ⏰ 计划学习时间：2-3 小时
 
 ---
@@ -9,227 +9,454 @@
 ## 🎯 学习目标
 
 完成 Day 25 的学习后，你应该掌握：
-- 理解 实战项目：日志监控告警脚本 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Linux 日志体系结构（rsyslog、journalctl、应用日志）
+- 掌握 grep/awk/sed 在日志分析中的高级组合用法
+- 能够编写实时日志监控脚本，检测异常模式并触发告警
+- 理解日志轮转（logrotate）与监控脚本的协作关系
+- 了解从脚本告警到现代日志管理（ELK/Loki）的演进路径
 
 ---
 
-## 📖 详细知识点
+## 📖 底层原理详解
 
-### 1. 系统负载监控
+### 1. Linux 日志体系架构
 
-#### 1.1 uptime 与 Load Average
-
-Load Average 表示 1/5/15 分钟内的平均负载（运行队列中的进程数）。
-
-**SRE 经验法则**：load < CPU 核数 = 健康；load > CPU 核数 = 过载。
-
-```bash
-$ uptime
- 14:30:25 up 30 days, 2:15,  load average: 0.50, 1.20, 0.80
+```
+应用层 → 日志输出
+    ↓
+syslog 协议 (RFC 5424)
+    ↓
+┌─────────────────────────────────────┐
+│ rsyslog / syslog-ng                 │
+│  - 接收、过滤、路由、存储            │
+│  - 规则: /etc/rsyslog.conf          │
+│  - 目录: /etc/rsyslog.d/*.conf      │
+└─────────────────────────────────────┘
+    ↓
+┌─────────────────┐    ┌──────────────────┐
+│ /var/log/syslog │    │ /var/log/journal │
+│ (文本日志)       │    │ (systemd journal) │
+└─────────────────┘    └──────────────────┘
 ```
 
-**SRE 实战排查**：
-```bash
-# 生产告警：load 15.2（4 核机器）→ 严重过载！
+#### 1.1 关键日志文件速查
 
-# 定位高 CPU 进程
-ps aux --sort=-%cpu | head -10
+| 日志文件 | 内容 | 重要级别 |
+|----------|------|----------|
+| `/var/log/syslog` | 系统综合日志 | ⭐⭐⭐ |
+| `/var/log/auth.log` | 认证/授权/登录 | ⭐⭐⭐⭐⭐ |
+| `/var/log/kern.log` | 内核消息 | ⭐⭐⭐⭐ |
+| `/var/log/dmesg` | 启动时内核消息 | ⭐⭐⭐ |
+| `/var/log/nginx/access.log` | Nginx 访问日志 | ⭐⭐⭐⭐ |
+| `/var/log/nginx/error.log` | Nginx 错误日志 | ⭐⭐⭐⭐⭐ |
+| `/var/log/mysql/error.log` | MySQL 错误日志 | ⭐⭐⭐⭐ |
+| `/var/log/cron.log` | 定时任务日志 | ⭐⭐⭐ |
+| `/var/log/apt/` | 包管理日志 | ⭐⭐ |
 
-# 查看进程状态分布
-ps aux | awk '{print $8}' | sort | uniq -c
-# D（不可中断睡眠）太多 = IO 等待
-# R（运行）太多 = CPU 瓶颈
+#### 1.2 日志格式
 
-# 查看 IO 等待
-vmstat 1 5
-# wa 高 = 磁盘瓶颈
+**Nginx Combined Log Format**（最常见）：
+```
+192.168.1.50 - frank [25/Apr/2026:14:30:25 +0800] "GET /api/users HTTP/1.1" 200 1234 "https://example.com" "Mozilla/5.0"
 ```
 
-#### 1.2 free — 内存监控
+字段分解：
+- `$remote_addr` — 客户端 IP
+- `$remote_user` — 认证用户（通常 `-`）
+- `$time_local` — 时间戳
+- `$request` — 请求行
+- `$status` — HTTP 状态码
+- `$body_bytes_sent` — 响应大小
+- `$http_referer` — 来源页
+- `$http_user_agent` — 浏览器 UA
 
-**关键**：看 `available` 而非 `free`！Linux 会用空闲内存做缓存。
-
-```bash
-$ free -h
-              total   used   free   buff/cache   available
-Mem:           16Gi   8.2Gi  1.1Gi     6.7Gi       7.3Gi
+**syslog 标准格式**：
+```
+Apr 25 14:30:25 hostname sshd[12345]: Failed password for root from 10.0.0.1 port 22 ssh2
 ```
 
+### 2. 日志分析核心命令
+
+#### 2.1 grep 高级用法
+
 ```bash
-# 真正的内存问题：available 很低 + swap 持续增加 = OOM 风险
-dmesg | grep -i "out of memory"
-dmesg | grep -i "killed process"
+# 基础搜索
+grep "ERROR" /var/log/syslog
+
+# 多模式搜索（任一匹配）
+grep -E "ERROR|CRITICAL|FATAL" /var/log/syslog
+
+# 多模式搜索（全部匹配）
+grep "ERROR" /var/log/syslog | grep "database"
+
+# 反向匹配（排除）
+grep -v "DEBUG" /var/log/app.log
+
+# 上下文（前后行）
+grep -C 3 "OutOfMemory" /var/log/app.log
+
+# 只输出匹配的文件名
+grep -rl "ERROR" /var/log/
+
+# 计数
+grep -c "Failed password" /var/log/auth.log
+
+# 高亮显示（默认启用）
+grep --color=auto "ERROR" /var/log/syslog
 ```
 
-#### 1.3 df/du — 磁盘
+#### 2.2 awk 在日志分析中的威力
 
 ```bash
-df -h                    # 磁盘使用率
-df -i                    # inode 使用率
-du -sh /* 2>/dev/null | sort -rh | head -10  # 大目录
-find / -type f -size +100M -exec ls -lh {} + 2>/dev/null  # 大文件
+# Nginx 日志：统计各 HTTP 状态码数量
+awk '{print $9}' /var/log/nginx/access.log | sort | uniq -c | sort -rn
+
+# Nginx 日志：找出访问最多的 IP
+awk '{print $1}' /var/log/nginx/access.log | sort | uniq -c | sort -rn | head -20
+
+# Nginx 日志：计算平均响应大小
+awk '{sum += $10; count++} END {print sum/count " bytes"}' access.log
+
+# auth.log：暴力破解检测
+awk '/Failed password/ {print $(NF-3)}' /var/log/auth.log | \
+    sort | uniq -c | sort -rn | \
+    awk '$1 > 10 {print "IP: "$2", 失败: "$1" 次"}'
+
+# syslog：按小时统计错误数
+awk '/ERROR/ {split($3, t, ":"); print t[1]":00"}' /var/log/syslog | \
+    sort | uniq -c
 ```
 
-#### 1.4 vmstat — 综合性能
+#### 2.3 sed 在日志处理中的应用
 
 ```bash
-vmstat 1 5
-# r > CPU 核数 = CPU 瓶颈
-# b > 0 = 磁盘瓶颈
-# si/so > 0 = 内存不足
-# wa 高 = IO 等待
-```
+# 删除注释行和空行
+sed '/^#/d; /^$/d' /etc/nginx/nginx.conf
 
-#### 1.5 sar — 历史数据回溯
+# 提取时间戳
+sed -n 's/.*\[\(.*\)\].*/\1/p' /var/log/nginx/access.log
 
-```bash
-# 启用 sysstat
-sudo sed -i 's/ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
+# 将 IP 替换为匿名化
+sed -E 's/([0-9]{1,3}\.){3}[0-9]{1,3}/x.x.x.x/g' access.log
 
-sar -u    # CPU 历史
-sar -r    # 内存历史
-sar -d    # 磁盘 IO 历史
-sar -n DEV  # 网络历史
+# 提取特定时间段（假设日志已按时间排序）
+sed -n '/Apr 25 14:/,/Apr 25 15:/p' /var/log/syslog
 ```
 
 ---
 
-### 2. SRE 实战：一键健康检查脚本
+## 💻 实战项目：日志监控告警脚本
+
+### 项目架构
+
+```
+log_monitor.sh
+├── 实时监控模式（tail -f 管道）
+├── 定时扫描模式（cron 驱动）
+└── 告警输出（终端/邮件/webhook）
+```
+
+### 完整实现
 
 ```bash
 #!/bin/bash
-echo "=== 健康检查 $(date) ==="
-echo "负载: $(uptime | awk -F'load average:' '{print $2}')"
-echo "内存:"; free -h | grep Mem
-echo "磁盘:"; df -h / | tail -1
-echo "Top CPU:"; ps aux --sort=-%cpu | head -4
-echo "Top MEM:"; ps aux --sort=-%mem | head -4
-echo "IO 等待:"; vmstat 1 1 | tail -1
-echo "错误日志:"; journalctl -p err --since "5 min ago" --no-pager | tail -3
-```
+# log_monitor.sh — 生产级日志监控告警脚本
+set -euo pipefail
 
----
+# ===== 配置区 =====
+CONFIG_FILE="${LOG_MONITOR_CONFIG:-/etc/log_monitor.conf}"
 
-### 3. 常见问题
+# 默认配置
+LOG_FILES=(
+    "/var/log/syslog"
+    "/var/log/auth.log"
+    "/var/log/nginx/error.log"
+)
 
-| 问题 | 排查思路 |
-|------|---------|
-| Load 高但 CPU 使用率低 | 检查 vmstat 的 wa，可能是磁盘瓶颈 |
-| 内存告警但 available 充足 | 正常！Linux 用空闲内存做缓存 |
-| Swap 持续增加 | 内存不足，排查内存泄漏 |
-| 磁盘使用率持续增长 | 检查日志轮转配置、临时文件 |
+# 告警规则（模式:严重级别:描述）
+declare -a ALERT_PATTERNS=(
+    "ERROR:warning:通用错误"
+    "CRITICAL:critical:严重错误"
+    "Failed password:warning:SSH 认证失败"
+    "Accepted password:info:SSH 登录成功"
+    "segfault:critical:段错误"
+    "Out of memory:critical:OOM 事件"
+    "TCP: Possible SYN flooding:critical:SYN Flood 攻击"
+    "kernel:.*BUG:critical:内核 BUG"
+)
 
+# 告警频率限制（同一规则 N 秒内只告警一次）
+ALERT_COOLDOWN=300
+ALERT_STATE_DIR="/tmp/log_monitor_state"
+WEBHOOK_URL="${WEBHOOK_URL:-}"
+EMAIL_TO="${ALERT_EMAIL:-}"
 
----
+# 颜色输出
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
 
-## 💻 实战练习
+# ===== 函数区 =====
 
-### 练习 1：运维实时监控脚本
+init() {
+    mkdir -p "$ALERT_STATE_DIR"
 
-```bash
-#!/bin/bash
-# ops_dashboard.sh
-while true; do
-    clear
-    echo "=== SRE OPS DASHBOARD $(date '+%H:%M:%S') ==="
-    load=$(cat /proc/loadavg | awk '{print $1", "$2", "$3}')
-    cpu_idle=$(vmstat 1 2 | tail -1 | awk '{print $15}')
-    echo "CPU Load: $load | Idle: ${cpu_idle}%"
-    echo "Memory: $(free -h | grep Mem)"
-    echo "Disk:"
-    df -h / /data 2>/dev/null | tail -n+2 | \
-        awk '{printf "  %-15s %s/%s (%s)\n", $6, $3, $2, $5}'
-    echo "Top Processes:"
-    ps aux --sort=-%cpu | head -4 | tail -3 | \
-        awk '{printf "  PID:%-8s CPU:%5s%% MEM:%5s%% %s\n", $2, $3, $4, $11}'
-    echo "Services:"
-    for svc in nginx mysql docker ssh; do
-        status=$(systemctl is-active $svc 2>/dev/null)
-        [ "$status" = "active" ] && echo "  [OK] $svc" || echo "  [!!] $svc"
+    # 检查日志文件是否存在
+    for log_file in "${LOG_FILES[@]}"; do
+        if [[ ! -f "$log_file" ]]; then
+            echo -e "${YELLOW}⚠️  日志文件不存在: $log_file${NC}"
+        elif [[ ! -r "$log_file" ]]; then
+            echo -e "${RED}❌ 无权限读取: $log_file${NC}"
+            exit 1
+        fi
     done
-    sleep 5
-done
+}
+
+# 检查告警频率限制
+should_alert() {
+    local rule_hash=$1
+    local state_file="$ALERT_STATE_DIR/$rule_hash"
+    local now=$(date +%s)
+
+    if [[ -f "$state_file" ]]; then
+        local last_alert=$(cat "$state_file")
+        local diff=$((now - last_alert))
+        if [[ $diff -lt $ALERT_COOLDOWN ]]; then
+            return 1  # 不应告警
+        fi
+    fi
+
+    echo "$now" > "$state_file"
+    return 0
+}
+
+# 发送告警
+send_alert() {
+    local level=$1
+    local message=$2
+    local log_file=$3
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    # 终端输出
+    case "$level" in
+        critical) echo -e "${RED}🚨 [$level] $message${NC}" ;;
+        warning)  echo -e "${YELLOW}⚠️  [$level] $message${NC}" ;;
+        info)     echo -e "${GREEN}ℹ️  [$level] $message${NC}" ;;
+    esac
+
+    # Webhook 告警（如钉钉/企业微信/Slack）
+    if [[ -n "$WEBHOOK_URL" ]]; then
+        curl -sS -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$(cat <<EOF
+{
+    "text": "[$level] $message\n日志: $log_file\n时间: $timestamp",
+    "level": "$level"
+}
+EOF
+)" &>/dev/null || true
+    fi
+
+    # 邮件告警
+    if [[ -n "$EMAIL_TO" && "$level" != "info" ]]; then
+        echo "[$level] $message (来自 $log_file)" | \
+            mail -s "🚨 日志告警: $message" "$EMAIL_TO" 2>/dev/null || true
+    fi
+
+    # 写入告警日志
+    echo "[$timestamp] [$level] $message | 来源: $log_file" >> /var/log/log_monitor_alerts.log
+}
+
+# 处理单行日志
+process_line() {
+    local line="$1"
+    local log_file="$2"
+
+    for rule in "${ALERT_PATTERNS[@]}"; do
+        IFS=':' read -r pattern level description <<< "$rule"
+
+        if echo "$line" | grep -qiE "$pattern"; then
+            local rule_hash=$(echo "$rule" | md5sum | cut -d' ' -f1)
+
+            if should_alert "$rule_hash"; then
+                # 提取关键信息（如 IP）
+                local ip=$(echo "$line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -1)
+                local ip_info=""
+                [[ -n "$ip" ]] && ip_info=" (来源IP: $ip)"
+
+                send_alert "$level" "$description${ip_info}" "$log_file"
+            fi
+        fi
+    done
+}
+
+# 实时监控模式
+monitor_realtime() {
+    echo "🔍 开始实时监控日志..."
+    echo "监控文件: ${LOG_FILES[*]}"
+    echo "按 Ctrl+C 停止"
+    echo "---"
+
+    # 使用 tail -f 监控多个文件
+    tail -f "${LOG_FILES[@]}" 2>/dev/null | while IFS= read -r line; do
+        # tail -f 多文件时会输出 ==> 文件名 <== 分隔行
+        if [[ "$line" == "==>"*"<=="* ]]; then
+            current_log=$(echo "$line" | sed 's/==> \(.*\) <==/\1/')
+            continue
+        fi
+        [[ -z "$line" ]] && continue
+
+        process_line "$line" "${current_log:-unknown}"
+    done
+}
+
+# 定时扫描模式（适合 cron）
+scan_logs() {
+    local since_minutes=${1:-5}
+    echo "📋 扫描过去 ${since_minutes} 分钟的日志..."
+
+    for log_file in "${LOG_FILES[@]}"; do
+        [[ ! -f "$log_file" ]] && continue
+
+        local cutoff_time=$(date -d "${since_minutes} minutes ago" '+%b %_d %H:%M' 2>/dev/null || \
+                            date -v-${since_minutes}M '+%b %_d %H:%M' 2>/dev/null || echo "")
+
+        if [[ -n "$cutoff_time" ]]; then
+            # 读取从指定时间开始的日志行
+            sed -n "/$cutoff_time/,\$p" "$log_file" 2>/dev/null | \
+            while IFS= read -r line; do
+                process_line "$line" "$log_file"
+            done
+        fi
+    done
+
+    echo "✅ 扫描完成"
+}
+
+# 暴力破解专项检测
+detect_brute_force() {
+    echo "🔒 SSH 暴力破解检测..."
+    local threshold=5
+
+    awk '/Failed password/ {print $(NF-3)}' /var/log/auth.log 2>/dev/null | \
+        sort | uniq -c | sort -rn | \
+    while read -r count ip; do
+        if [[ $count -gt $threshold ]]; then
+            local rule_hash="bruteforce_$(echo $ip | md5sum | cut -d' ' -f1)"
+            if should_alert "$rule_hash"; then
+                send_alert "critical" "SSH 暴力破解: IP $ip 失败 $count 次" "/var/log/auth.log"
+            fi
+        fi
+    done
+}
+
+# ===== 主入口 =====
+
+usage() {
+    echo "用法: $0 {monitor|scan|bruteforce}"
+    echo ""
+    echo "  monitor          实时监控模式（tail -f）"
+    echo "  scan [分钟]       扫描模式，默认过去 5 分钟"
+    echo "  bruteforce       SSH 暴力破解检测"
+    echo ""
+    echo "环境变量:"
+    echo "  WEBHOOK_URL      Webhook 告警地址"
+    echo "  ALERT_EMAIL      邮件告警地址"
+    echo "  LOG_MONITOR_CONFIG  配置文件路径"
+}
+
+case "${1:-}" in
+    monitor)
+        init
+        monitor_realtime
+        ;;
+    scan)
+        init
+        scan_logs "${2:-5}"
+        ;;
+    bruteforce)
+        init
+        detect_brute_force
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
 ```
 
-### 练习 2：历史数据回溯
+### 部署到 cron
 
 ```bash
-sudo sed -i 's/ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
-systemctl restart sysstat
-sar -u          # CPU 历史
-sar -r          # 内存历史
-sar -d -p       # 磁盘 IO
-sar -u -s 14:00 -e 15:00  # 特定时间段
+# 每 5 分钟扫描一次日志
+*/5 * * * * /opt/scripts/log_monitor.sh scan 5 >> /var/log/log_monitor_cron.log 2>&1
+
+# 每 30 分钟检测暴力破解
+*/30 * * * * /opt/scripts/log_monitor.sh bruteforce >> /var/log/log_monitor_cron.log 2>&1
 ```
 
+---
+
+## 🧪 练习题
+
+### 练习 1：编写 Nginx 5xx 错误率监控
+```bash
+# 编写脚本：每 5 分钟检查 Nginx 5xx 错误率
+# 如果过去 5 分钟内 5xx 占比 > 5%，发送告警
+```
+
+<details>
+<summary>答案</summary>
+
+```bash
+#!/bin/bash
+LOG="/var/log/nginx/access.log"
+THRESHOLD=5
+
+# 获取最近 5 分钟的日志（简化：取最后 1000 行）
+total=$(tail -1000 "$LOG" | wc -l)
+errors=$(tail -1000 "$LOG" | awk '$9 >= 500' | wc -l)
+
+if [[ $total -gt 0 ]]; then
+    rate=$((errors * 100 / total))
+    if [[ $rate -gt $THRESHOLD ]]; then
+        echo "🚨 Nginx 5xx 错误率: ${rate}% ($errors/$total) 超过阈值 ${THRESHOLD}%"
+        # 触发告警...
+    fi
+fi
+```
+</details>
+
+### 练习 2：日志轮转兼容性
+
+```bash
+# 日志轮转后，tail -f 会丢失新日志。如何修复？
+```
+
+<details>
+<summary>答案</summary>
+
+使用 `tail -F`（大写 F）代替 `tail -f`：
+```bash
+# -f: 跟踪文件描述符（轮转后失效）
+# -F: 跟踪文件名（轮转后自动重新打开）
+tail -F /var/log/syslog
+```
+或在 logrotate 配置中添加 `copytruncate` 而非 `create`。
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+- [rsyslog 官方文档](https://www.rsyslog.com/doc/)
+- [systemd journal 文档](https://www.freedesktop.org/software/systemd/man/journald.conf.html)
+- 《日志管理最佳实践》— Google SRE Book
+- ELK Stack (Elasticsearch + Logstash + Kibana)
+- Grafana Loki — 轻量级日志聚合系统
 
 ---
 
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-04-25 10:58:14*  
+*由 SRE 学习计划自动生成 | 2026-04-25*
 *Generated by Hermes Agent with review*

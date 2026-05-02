@@ -1,87 +1,74 @@
-# Day 94: DaemonSet & Job/CronJob
+# Day 94: DaemonSet & Job & CronJob
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：DaemonSet & Job/CronJob  
+> 📅 日期：2026-05-03
+> 📖 学习主题：DaemonSet & Job & CronJob
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 94 的学习后，你应该掌握：
-- 理解 DaemonSet & Job/CronJob 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解三种控制器的工作负载
+- 能编写对应的 YAML
 
 ---
 
-## 📖 详细知识点
+## 📖 工作负载类型
 
-### 1. DaemonSet & Job/CronJob
+### 1. DaemonSet
 
-#### 1.1 DaemonSet — 每个节点运行一个 Pod
+```
+在每个节点上运行一个 Pod 副本
+适用：日志收集、监控代理
 
-适用场景：日志收集（Fluent Bit）、监控（Node Exporter）、网络插件。
-
-```yaml
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: fluent-bit
-  namespace: kube-system
+  name: fluentd
 spec:
   selector:
     matchLabels:
-      app: fluent-bit
+      app: fluentd
   template:
     metadata:
       labels:
-        app: fluent-bit
+        app: fluentd
     spec:
       containers:
-      - name: fluent-bit
-        image: fluent/fluent-bit:latest
-        volumeMounts:
-        - name: varlog
-          mountPath: /var/log
-        - name: containers
-          mountPath: /var/lib/docker/containers
-          readOnly: true
-      volumes:
-      - name: varlog
-        hostPath:
-          path: /var/log
-      - name: containers
-        hostPath:
-          path: /var/lib/docker/containers
+        - name: fluentd
+          image: fluentd:v1
 ```
 
-#### 1.2 Job — 一次性任务
+### 2. Job
 
-```yaml
+```
+运行一次直到完成
+适用：批处理、数据迁移
+
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: db-migration
+  name: backup
 spec:
   template:
     spec:
       containers:
-      - name: migration
-        image: myapp:migrate
-        command: ["python", "manage.py", "migrate"]
+        - name: backup
+          image: backup-tool:v1
+          args: ["--full"]
       restartPolicy: Never
-  backoffLimit: 3  # 最多重试 3 次
 ```
 
-#### 1.3 CronJob — 定时任务
+### 3. CronJob
 
-```yaml
+```
+定时运行 Job
+适用：定期备份、清理
+
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: backup
+  name: cleanup
 spec:
   schedule: "0 2 * * *"  # 每天凌晨 2 点
   jobTemplate:
@@ -89,128 +76,14 @@ spec:
       template:
         spec:
           containers:
-          - name: backup
-            image: backup-tool:latest
-            command: ["./backup.sh"]
+            - name: cleanup
+              image: cleanup-tool:v1
           restartPolicy: OnFailure
-  successfulJobsHistoryLimit: 3   # 保留 3 个成功记录
-  failedJobsHistoryLimit: 1       # 保留 1 个失败记录
 ```
 
-
 ---
 
-## 💻 实战练习
+## 📚 扩展阅读
 
-### 练习 1：部署完整应用
-
-```yaml
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    metadata:
-      labels:
-        app: web-app
-    spec:
-      containers:
-      - name: web-app
-        image: myapp:latest
-        ports:
-        - containerPort: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
-```
-
-```bash
-kubectl apply -f deployment.yaml
-kubectl get pods -w
-kubectl rollout status deployment/web-app
-kubectl rollout undo deployment/web-app  # 回滚
-```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:20*  
-*Generated by Hermes Agent with review*
+- [DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/)
+- [Job](https://kubernetes.io/docs/concepts/workloads/controllers/job/)

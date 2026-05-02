@@ -1,177 +1,152 @@
-# Day 56: 理论测试：GIL、threading vs multiprocessing
+# Day 56: 理论测试 — GIL、threading vs multiprocessing
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：理论测试：GIL、threading vs multiprocessing  
+> 📅 日期：2026-05-02
+> 📖 学习主题：理论测试：GIL、threading vs multiprocessing
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 56 的学习后，你应该掌握：
-- 理解 理论测试：GIL、threading vs multiprocessing 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 GIL 的本质和影响
+- 能正确选择 threading 或 multiprocessing
+- 掌握并发编程的常见陷阱
 
 ---
 
-## 📖 详细知识点
+## 📖 GIL 详解
 
-### 1. 理论测试：GIL、threading vs multiprocessing
+### 1. 什么是 GIL
 
-#### 1.1 基础概念
+GIL（Global Interpreter Lock）是 CPython 中的一个互斥锁，确保同一时刻只有一个线程执行 Python 字节码。
 
-理论测试：GIL、threading vs multiprocessing 是网络通信的重要组成部分。
+为什么需要 GIL？
+- CPython 的内存管理不是线程安全的
+- GIL 简化了 C 扩展的实现
+- 代价：多线程不能真正并行执行 CPU 密集型任务
 
-#### 1.2 常用命令
-
-```bash
-# 网络诊断工具
-ping -c 4 example.com           # 测试连通性
-traceroute example.com          # 追踪路径
-mtr example.com                 # 综合诊断
-```
-
-#### 1.3 SRE 实战
-
-- 网络故障排查流程：ping → traceroute → telnet/nc → curl
-- 编写网络诊断脚本
-
-#### 1.4 练习
-
-- 使用相关命令进行网络诊断
-- 分析网络延迟和丢包
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：主机监控脚本
+### 2. GIL 的影响
 
 ```python
-#!/usr/bin/env python3
-import psutil, json, datetime
+# CPU 密集型 - threading 无效（受 GIL 限制）
+import threading
+import time
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
-        try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
+def cpu_work():
+    x = 0
+    for i in range(10**7):
+        x += i
 
-data = check_system()
-print(json.dumps(data, indent=2))
+# 串行
+start = time.time()
+cpu_work()
+cpu_work()
+print(f"Serial: {time.time()-start:.2f}s")
 
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+# 多线程（不会更快！）
+start = time.time()
+t1 = threading.Thread(target=cpu_work)
+t2 = threading.Thread(target=cpu_work)
+t1.start(); t2.start()
+t1.join(); t2.join()
+print(f"Thread: {time.time()-start:.2f}s")  # 差不多甚至更慢
+
+# 多进程（会更快）
+import multiprocessing
+start = time.time()
+p1 = multiprocessing.Process(target=cpu_work)
+p2 = multiprocessing.Process(target=cpu_work)
+p1.start(); p2.start()
+p1.join(); p2.join()
+print(f"Process: {time.time()-start:.2f}s")  # 快约 2 倍
 ```
 
-### 练习 2：日志分析工具
+### 3. 选择指南
+
+| 场景 | 推荐 | 原因 |
+|------|------|------|
+| HTTP 请求 | ThreadPoolExecutor | I/O 密集，GIL 在等待时释放 |
+| 文件读写 | ThreadPoolExecutor | I/O 密集 |
+| 数据库查询 | ThreadPoolExecutor | I/O 密集 |
+| 数据处理 | ProcessPoolExecutor | CPU 密集，绕过 GIL |
+| 加密计算 | ProcessPoolExecutor | CPU 密集 |
+| 图像处理 | ProcessPoolExecutor | CPU 密集 |
+
+### 4. 绕过 GIL 的方法
+
+1. 使用 multiprocessing（每个进程有自己的 GIL）
+2. 使用 C 扩展（numpy、scipy 等在 C 层释放 GIL）
+3. 使用其他 Python 实现（PyPy STM、Jython）
+4. Python 3.13+ 的 free-threading 实验功能
+
+---
+
+## 🧪 理论测试题
+
+### 问题 1：以下哪个场景适合用 threading？
+
+A. 计算 100 万个数字的平方和
+B. 从 100 个 URL 下载网页
+C. 压缩一个大文件
+D. 训练一个机器学习模型
+
+<details>
+<summary>答案</summary>
+
+B. 从 100 个 URL 下载网页
+因为这是 I/O 密集型任务，线程在等待网络响应时会释放 GIL，其他线程可以继续执行。
+</details>
+
+### 问题 2：以下代码的输出是什么？
 
 ```python
-import re
-from collections import Counter
+import threading
 
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
+counter = 0
 
-analyze_nginx_log("/var/log/nginx/access.log")
+def increment():
+    global counter
+    for _ in range(100000):
+        counter += 1
+
+t1 = threading.Thread(target=increment)
+t2 = threading.Thread(target=increment)
+t1.start()
+t2.start()
+t1.join()
+t2.join()
+print(counter)
 ```
 
+<details>
+<summary>答案</summary>
+
+结果不确定！可能小于 200000。
+因为 `counter += 1` 不是原子操作，存在竞态条件。
+需要使用 threading.Lock 来保护共享变量：
+```python
+lock = threading.Lock()
+def increment():
+    global counter
+    for _ in range(100000):
+        with lock:
+            counter += 1
+```
+</details>
+
+### 问题 3：GIL 在 Python 3.13 中的变化是什么？
+
+<details>
+<summary>答案</summary>
+
+Python 3.13 引入了实验性的 free-threading 模式（PEP 703），
+可以通过 `python3.13t` 运行，不再有 GIL。
+但这仍然是实验性的，生产环境不建议使用。
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 13:37:11*  
-*Generated by Hermes Agent with review*
+- [GIL 官方 Wiki](https://wiki.python.org/moin/GlobalInterpreterLock)
+- [David Beazley - GIL 演讲](https://www.dabeaz.com/python/UnderstandingGIL.pdf)

@@ -1,203 +1,82 @@
 # Day 96: Kubernetes Ingress
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Kubernetes Ingress  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Kubernetes Ingress
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 96 的学习后，你应该掌握：
-- 理解 Kubernetes Ingress 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Ingress 的作用
+- 能配置基于域名的路由
 
 ---
 
-## 📖 详细知识点
+## 📖 Ingress
 
-### 1. Ingress — HTTP/HTTPS 路由
-
-#### 1.1 Ingress vs Service
+### 1. 什么是 Ingress
 
 ```
-Internet → LoadBalancer → Ingress Controller → Ingress Rules → Service → Pod
-
-Service: L4 负载均衡（TCP/UDP）
-Ingress: L7 路由（HTTP/HTTPS，基于域名/路径）
+Ingress 管理外部访问到集群内服务：
+- 基于域名的路由
+- TLS 终止
+- 负载均衡
+- 需要 Ingress Controller（如 Nginx、Traefik）
 ```
 
-#### 1.2 Nginx Ingress Controller
-
-```bash
-# 安装
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
-
-# 验证
-kubectl get pods -n ingress-nginx
-kubectl get svc -n ingress-nginx
-```
-
-#### 1.3 Ingress 规则
+### 2. Ingress YAML
 
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: web-ingress
+  name: myapp
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
-  tls:
-  - hosts:
-    - example.com
-    secretName: example-tls
   rules:
-  - host: example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: web-app
-            port:
-              number: 80
-      - path: /api
-        pathType: Prefix
-        backend:
-          service:
-            name: api-app
-            port:
-              number: 8080
+    - host: myapp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myapp
+                port:
+                  number: 80
 ```
 
-### 2. SRE 实战：多域名路由
-
-```
-example.com/    → web-app (前端)
-example.com/api → api-app (后端 API)
-api.example.com → api-app（直接访问后端）
-grafana.example.com → grafana (监控)
-```
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：部署完整应用
+### 3. TLS
 
 ```yaml
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
 spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    metadata:
-      labels:
-        app: web-app
-    spec:
-      containers:
-      - name: web-app
-        image: myapp:latest
-        ports:
-        - containerPort: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
+  tls:
+    - hosts:
+        - myapp.example.com
+      secretName: myapp-tls
+  rules:
+    - host: myapp.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myapp
+                port:
+                  number: 80
 ```
+
+### 4. 安装 Nginx Ingress Controller
 
 ```bash
-kubectl apply -f deployment.yaml
-kubectl get pods -w
-kubectl rollout status deployment/web-app
-kubectl rollout undo deployment/web-app  # 回滚
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 ```
 
-
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:20*  
-*Generated by Hermes Agent with review*
+- [Ingress 文档](https://kubernetes.io/docs/concepts/services-networking/ingress/)

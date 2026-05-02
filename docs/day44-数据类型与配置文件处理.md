@@ -1,188 +1,214 @@
-# Day 44: 数据类型与配置文件处理
+# Day 44: Python 数据类型与配置文件处理
 
-> 📅 日期：2026-04-30  
-> 📖 学习主题：数据类型与配置文件处理  
+> 📅 日期：2026-05-02
+> 📖 学习主题：Python 数据类型与配置文件处理
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 44 的学习后，你应该掌握：
-- 理解 数据类型与配置文件处理 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 掌握 Python 核心数据结构（list/dict/tuple/set）
+- 能处理 JSON、YAML、INI、TOML 配置文件
+- 理解数据结构在 SRE 工具中的实际应用场景
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 数据类型与配置文件处理
-
-#### 1. 基础知识
-
-Python 是 SRE 最常用的脚本语言之一。
-
-#### 2. 核心概念
-
-- 变量和数据结构（列表、字典、元组、集合）
-- 控制流程（if/for/while）
-- 函数和模块
-- 异常处理（try/except）
-- 文件和 I/O 操作
+### 1. 列表与字典
 
 ```python
-# 示例：读取配置文件
-import json
+# 列表推导式
+servers = ["web01", "web02", "db01"]
+active = [s for s in servers if s.startswith("web")]
+# ['web01', 'web02']
 
-with open('config.json') as f:
-    config = json.load(f)
+# 嵌套列表展平
+nested = [[1, 2], [3, 4], [5]]
+flat = [x for row in nested for x in row]
 
-print(f"Server: {config['host']}:{config['port']}")
+# 字典操作
+config = {"host": "0.0.0.0", "port": 8080}
+config.get("timeout", 30)  # 安全访问
+
+# 字典推导式
+squared = {x: x**2 for x in range(5)}
+
+# Python 3.9+ 字典合并
+defaults = {"timeout": 30, "retries": 3}
+overrides = {"timeout": 60}
+config = defaults | overrides  # {'timeout': 60, 'retries': 3}
 ```
 
-#### 3. SRE 实战
+### 2. JSON 处理
 
-- 主机监控脚本（psutil 库）
-- 日志分析工具
-- API 调用（requests 库）
+```python
+import json
 
-#### 4. 练习
+# 读取
+with open("config.json") as f:
+    data = json.load(f)
 
-- 编写 Python 脚本监控系统资源
-- 解析 JSON 配置文件
-- 调用 REST API
+# 写入
+with open("output.json", "w") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
 
+# 解析 API 响应
+resp = requests.get("https://api.example.com/metrics")
+metrics = resp.json()
+
+# JSON 验证
+try:
+    data = json.loads(raw_text)
+except json.JSONDecodeError as e:
+    print(f"Invalid JSON at line {e.lineno}")
+```
+
+### 3. YAML 处理
+
+```python
+# pip install pyyaml
+import yaml
+
+# 安全加载
+with open("docker-compose.yml") as f:
+    config = yaml.safe_load(f)
+
+# 写入
+with open("output.yaml", "w") as f:
+    yaml.dump(config, f, default_flow_style=False)
+
+# 多文档 YAML
+with open("k8s-manifests.yaml") as f:
+    docs = list(yaml.safe_load_all(f))
+```
+
+### 4. INI / TOML
+
+```python
+import configparser
+config = configparser.ConfigParser()
+config.read("app.ini")
+db_host = config["database"]["host"]
+
+# TOML (Python 3.11+ 内置)
+import tomllib
+with open("pyproject.toml", "rb") as f:
+    data = tomllib.load(f)
+```
 
 ---
 
-## 💻 实战练习
-
-### 练习 1：主机监控脚本
+## 🏗️ 实战：配置合并工具
 
 ```python
 #!/usr/bin/env python3
-import psutil, json, datetime
+"""Deep merge configuration files."""
+import json
+import sys
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
-        try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
 
-data = check_system()
-print(json.dumps(data, indent=2))
+def deep_merge(base, override):
+    """Recursively merge two dicts."""
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: merge.py base.json override.json")
+        sys.exit(1)
+
+    with open(sys.argv[1]) as f:
+        base = json.load(f)
+    with open(sys.argv[2]) as f:
+        override = json.load(f)
+
+    merged = deep_merge(base, override)
+    print(json.dumps(merged, indent=2))
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-### 练习 2：日志分析工具
+---
+
+## 🧪 练习题
+
+### 练习 1：日志统计
+
+从 JSON 格式的日志文件中统计每个状态码的出现次数。
+
+<details>
+<summary>答案</summary>
 
 ```python
-import re
+import json
 from collections import Counter
 
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
+with open("access.json") as f:
+    logs = json.load(f)
 
-analyze_nginx_log("/var/log/nginx/access.log")
+counts = Counter(entry["status"] for entry in logs)
+for status, count in counts.most_common():
+    print(f"{status}: {count}")
 ```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+</details>
 
 ---
 
-## 📝 笔记
+## 🧪 练习题
 
-### 今日学习总结
+### 练习 1：配置验证器
 
-（在此记录你的学习心得）
+编写一个 YAML 配置验证器，检查必填字段是否存在且类型正确。
 
-### 遇到的问题与解决
+<details>
+<summary>答案</summary>
 
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
+```python
+import yaml
+import sys
 
-### 延伸思考
+def validate(config, schema):
+    errors = []
+    for key, expected in schema.items():
+        if key not in config:
+            errors.append(f"Missing: {key}")
+        elif not isinstance(config[key], expected):
+            errors.append(f"Wrong type: {key}")
+    return errors
 
-- 思考 1：...
-- 思考 2：...
+schema = {
+    "server": dict,
+    "database": dict,
+    "log_level": str,
+    "max_connections": int,
+}
+
+with open("config.yaml") as f:
+    config = yaml.safe_load(f)
+
+errors = validate(config, schema)
+if errors:
+    for e in errors:
+        print(f"  - {e}")
+    sys.exit(1)
+else:
+    print("Configuration valid")
+```
+</details>
 
 ---
 
-## ✅ 完成检查
+## 📚 扩展阅读
 
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-04-30 09:00:44*  
-*Generated by Hermes Agent with review*
+- [Python 数据结构文档](https://docs.python.org/3/tutorial/datastructures.html)
+- [JSON 规范 RFC 8259](https://datatracker.ietf.org/doc/html/rfc8259)

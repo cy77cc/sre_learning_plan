@@ -1,199 +1,248 @@
-# Day 28: 阶段总结与测试：Linux 基础与 Shell 脚本综合能力评估
+# Day 28: Linux 基础与 Shell 脚本综合能力评估
 
-> 📅 日期：2026-04-25  
-> 📖 学习主题：阶段总结与测试：Linux 基础与 Shell 脚本综合能力评估  
+> 📅 日期：2026-05-02
+> 📖 学习主题：Linux 基础与 Shell 脚本综合能力评估
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 28 的学习后，你应该掌握：
-- 理解 阶段总结与测试：Linux 基础与 Shell 脚本综合能力评估 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 综合运用前三周所学的 Linux 和 Shell 知识
+- 能独立编写复杂的运维脚本
+- 掌握脚本的最佳实践和常见陷阱
 
 ---
 
-## 📖 详细知识点
+## 📖 综合知识回顾
 
-### Day {day} 复习与实战
+### 1. Linux 核心知识点
 
-#### 场景 1：新购云服务器从零配置
+| 领域 | 关键命令 | 用途 |
+|------|---------|------|
+| 文件操作 | find, cp, mv, rm | 搜索和管理文件 |
+| 权限管理 | chmod, chown, chgrp | 设置文件权限和所有者 |
+| 进程管理 | ps, top, kill, nice | 监控和控制进程 |
+| 网络 | netstat, ss, curl, wget | 网络诊断和访问 |
+| 磁盘 | df, du, fdisk, mount | 磁盘空间和分区管理 |
+| 日志 | journalctl, tail, grep | 查看和分析日志 |
 
-```bash
-# 1. 系统更新
-sudo apt update && sudo apt upgrade -y
-
-# 2. 创建用户
-sudo useradd -m -s /bin/bash -G sudo sreuser
-
-# 3. 安装基础工具
-sudo apt install -y curl wget vim git htop tree net-tools
-
-# 4. 配置防火墙
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-```
-
-#### 场景 2：日志分析挑战
+### 2. Shell 脚本最佳实践
 
 ```bash
-# 找出暴力破解的 IP
-grep "Failed password" /var/log/auth.log | \
-    awk '{{print $(NF-3)}}' | sort | uniq -c | sort -rn | head -10
+#!/usr/bin/env bash
+set -euo pipefail  # 严格模式
 
-# 分析 Nginx 日志
-awk '{{print $9}}' /var/log/nginx/access.log | sort | uniq -c | sort -rn
+# 使用函数组织代码
+main() {
+    local config_file="${1:-config.yaml}"
+    check_prerequisites
+    load_config "$config_file"
+    run_task
+    cleanup
+}
 
-# 统计磁盘使用
-du -sh /var/log/* | sort -rh | head -10
+# 使用局部变量
+process_data() {
+    local input_file=$1
+    local output_dir=$2
+    # ...
+}
+
+# 检查依赖
+check_prerequisites() {
+    for cmd in curl jq rsync; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo "Error: $cmd not found" >&2
+            exit 1
+        fi
+    done
+}
+
+main "$@"
 ```
-
-#### 场景 3：权限排查
-
-```bash
-# 排查 403 Forbidden
-ls -la /var/www/html/
-namei -l /var/www/html/index.html
-getfacl /var/www/html/
-```
-
-#### 自我评估
-
-- [ ] 能否不查阅文档完成常用文件操作？
-- [ ] 能否独立排查权限问题？
-- [ ] 能否编写基本的 Shell 脚本？
-- [ ] 能否分析日志找出问题？
-
 
 ---
 
-## 💻 实战练习
+## 🏗️ 实战：完整运维脚本
 
-### 练习 1：企业级服务器初始化
+```bash
+#!/usr/bin/env bash
+# deploy.sh - 完整部署脚本
+set -euo pipefail
 
-**场景**：新购 3 台云服务器，30 分钟内完成初始化并交付。
+# 配置
+APP_NAME="myapp"
+DEPLOY_DIR="/opt/${APP_NAME}"
+BACKUP_DIR="/var/backups/${APP_NAME}"
+LOG_FILE="/var/log/${APP_NAME}-deploy.log"
+MAX_BACKUPS=5
+
+# 日志函数
+log() {
+    local level=$1; shift
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*" | tee -a "$LOG_FILE"
+}
+
+# 前置检查
+pre_checks() {
+    log INFO "Running pre-deployment checks..."
+
+    if [[ ! -f "build/artifact.tar.gz" ]]; then
+        log ERROR "Build artifact not found"
+        exit 1
+    fi
+
+    if ! command -v systemctl &>/dev/null; then
+        log ERROR "systemctl not available"
+        exit 1
+    fi
+
+    local disk_usage
+    disk_usage=$(df "$DEPLOY_DIR" --output=pcent | tail -1 | tr -d ' %')
+    if (( disk_usage > 85 )); then
+        log ERROR "Disk usage at ${disk_usage}%, deployment aborted"
+        exit 1
+    fi
+
+    log INFO "Pre-checks passed"
+}
+
+# 备份当前版本
+backup_current() {
+    if [[ -d "$DEPLOY_DIR/current" ]]; then
+        mkdir -p "$BACKUP_DIR"
+        local backup_name="backup-$(date +%Y%m%d-%H%M%S)"
+        cp -r "$DEPLOY_DIR/current" "$BACKUP_DIR/$backup_name"
+        log INFO "Backed up to $backup_name"
+
+        # 清理旧备份
+        ls -dt "$BACKUP_DIR"/backup-* 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
+    fi
+}
+
+# 部署新版本
+deploy() {
+    mkdir -p "$DEPLOY_DIR"
+    local release_dir="$DEPLOY_DIR/releases/$(date +%Y%m%d-%H%M%S)"
+
+    log INFO "Extracting artifact to $release_dir"
+    mkdir -p "$release_dir"
+    tar xzf build/artifact.tar.gz -C "$release_dir"
+
+    # 创建符号链接
+    ln -sfn "$release_dir" "$DEPLOY_DIR/current"
+
+    log INFO "Deployment complete"
+}
+
+# 健康检查
+health_check() {
+    local max_wait=30
+    local elapsed=0
+
+    log INFO "Waiting for service to become healthy..."
+    while (( elapsed < max_wait )); do
+        if curl -sf "http://localhost:8080/health" &>/dev/null; then
+            log INFO "Service is healthy"
+            return 0
+        fi
+        sleep 2
+        ((elapsed += 2))
+    done
+
+    log ERROR "Health check timed out after ${max_wait}s"
+    return 1
+}
+
+# 回滚
+rollback() {
+    local latest_backup
+    latest_backup=$(ls -dt "$BACKUP_DIR"/backup-* 2>/dev/null | head -1)
+
+    if [[ -n "$latest_backup" ]]; then
+        log WARN "Rolling back to $latest_backup"
+        ln -sfn "$latest_backup" "$DEPLOY_DIR/current"
+        systemctl restart "$APP_NAME"
+    else
+        log ERROR "No backup found for rollback"
+        exit 1
+    fi
+}
+
+# 主流程
+main() {
+    log INFO "Starting deployment of $APP_NAME"
+
+    pre_checks
+    backup_current
+
+    if ! deploy; then
+        log ERROR "Deployment failed, rolling back"
+        rollback
+        exit 1
+    fi
+
+    systemctl restart "$APP_NAME"
+
+    if ! health_check; then
+        log ERROR "Health check failed, rolling back"
+        rollback
+        exit 1
+    fi
+
+    log INFO "Deployment successful"
+}
+
+main "$@"
+```
+
+---
+
+## 🧪 综合练习
+
+### 练习 1：日志轮转脚本
+
+编写一个脚本，每天凌晨 2 点轮转 /var/log/myapp/ 下的日志文件，保留最近 30 天，压缩旧日志。
+
+<details>
+<summary>答案</summary>
 
 ```bash
 #!/bin/bash
-# enterprise_server_init.sh
-set -euo pipefail
+LOG_DIR="/var/log/myapp"
+RETAIN_DAYS=30
+DATE=$(date +%Y%m%d)
 
-# 1. 系统更新与安全补丁
-apt update && apt upgrade -y
+mkdir -p "$LOG_DIR/archive"
 
-# 2. 创建运维用户（禁止 root 直接登录）
-useradd -m -s /bin/bash -G sudo ops-admin
+for f in "$LOG_DIR"/*.log; do
+    [[ -f "$f" ]] || continue
+    base=$(basename "$f" .log)
+    cp "$f" "$LOG_DIR/archive/${base}-${DATE}.log"
+    truncate -s 0 "$f"
+done
 
-# 3. SSH 安全加固
-sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-systemctl restart sshd
-
-# 4. 防火墙
-ufw default deny incoming
-ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp
-ufw enable
-
-# 5. 安装监控基础
-apt install -y htop iotop net-tools strace lsof sysstat
-
-echo "服务器初始化完成"
+find "$LOG_DIR/archive" -name "*.log" -mtime +$RETAIN_DAYS -exec gzip {} \;
+find "$LOG_DIR/archive" -name "*.gz" -mtime +$((RETAIN_DAYS * 2)) -delete
 ```
-
-### 练习 2：故障排查挑战
-
-**场景**：生产服务器 CPU 持续 100%，10 分钟内定位根因。
-
-```bash
-# 定位高 CPU 进程
-ps aux --sort=-%cpu | head -5
-# 检查进程状态
-ps -eo pid,user,%cpu,%mem,stat,comm | sort -k3 -rn | head -10
-# 跟踪系统调用
-strace -p <PID> -c -s 100
-# 检查 IO 等待
-iostat -x 1 3
-```
-
-### 练习 3：性能基准测试
-
-```bash
-# 磁盘性能
-dd if=/dev/zero of=/tmp/test bs=1M count=1024 oflag=direct
-# 内存性能
-sysbench memory --memory-block-size=1M --memory-total-size=10G run
-```
-
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
+- [Google Shell Style Guide](https://google.github.io/styleguide/shellguide.html)
+- [Bash Best Practices](https://wiki.bash-hackers.org/scripting/bestpractices)
 
 
----
+### 3. 常见 Shell 陷阱
 
-## 📝 笔记
+hello world
+hello world
+0
+still running
 
-### 今日学习总结
+### 4. 脚本调试技巧
 
-（在此记录你的学习心得）
 
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-04-25 10:58:14*  
-*Generated by Hermes Agent with review*

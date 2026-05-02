@@ -1,192 +1,238 @@
-# Day 46: 函数、日志模块与异常处理
+# Day 46: Python 函数、日志模块与异常处理
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：函数、日志模块与异常处理  
+> 📅 日期：2026-05-02
+> 📖 学习主题：Python 函数、日志模块与异常处理
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 46 的学习后，你应该掌握：
-- 理解 函数、日志模块与异常处理 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 掌握 Python 函数的高级用法（装饰器、生成器、lambda）
+- 熟练使用 logging 模块
+- 掌握异常处理的 best practices
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 日志体系
+### 1. 函数高级用法
 
-#### 1.1 重要日志文件
+```python
+# 默认参数陷阱（不要用可变对象作默认值）
+def add_item(item, items=None):  # 正确
+    if items is None:
+        items = []
+    items.append(item)
+    return items
 
-| 日志 | 用途 |
-|------|------|
-| `/var/log/syslog` | 系统日志（Ubuntu） |
-| `/var/log/auth.log` | 认证/登录日志 |
-| `/var/log/kern.log` | 内核日志 |
-| `/var/log/nginx/` | Nginx 访问和错误日志 |
-| `/var/log/journal/` | systemd journal |
+# *args 和 **kwargs
+def log_event(level, *args, **kwargs):
+    msg = " ".join(str(a) for a in args)
+    extra = ", ".join(f"{k}={v}" for k, v in kwargs.items())
+    print(f"[{level}] {msg} {extra}")
 
-#### 1.2 journalctl 高级用法
-
-```bash
-journalctl -f                          # 实时跟踪
-journalctl -u nginx --since "1h ago"   # 服务日志
-journalctl -p err                      # 错误级别
-journalctl --disk-usage                # 占用空间
-sudo journalctl --vacuum-size=500M    # 清理
+log_event("ERROR", "disk full", host="web01", disk="/dev/sda1")
 ```
 
-#### 1.3 logrotate 日志轮转
+### 2. 装饰器
 
-```bash
-# 查看现有配置
-ls /etc/logrotate.d/
+```python
+import time
+import functools
 
-# 常用参数：
-# daily/weekly/monthly  — 轮转频率
-# rotate N              — 保留 N 个旧文件
-# compress              — 压缩旧文件
-# size 100M             — 超过此大小才轮转
-# missingok             — 文件不存在不报错
+def retry(max_attempts=3, delay=1):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_attempts - 1:
+                        raise
+                    time.sleep(delay * (2 ** attempt))
+            return None
+        return wrapper
+    return decorator
+
+@retry(max_attempts=3, delay=2)
+def fetch_data(url):
+    return requests.get(url).json()
+```
+
+### 3. 日志模块
+
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("app.log"),
+    ],
+)
+
+logger = logging.getLogger(__name__)
+logger.info("Service started")
+logger.warning("High memory usage: 85%")
+logger.error("Connection failed", exc_info=True)
+```
+
+### 4. 异常处理
+
+```python
+# 正确做法
+try:
+    result = process_data(data)
+except ValueError as e:
+    logger.error(f"Invalid data: {e}")
+    raise
+except Exception as e:
+    logger.exception("Unexpected error")
+    raise
+finally:
+    cleanup()
+
+# 自定义异常
+class ServiceUnavailableError(Exception):
+    def __init__(self, service, url):
+        self.service = service
+        self.url = url
+        super().__init__(f"Service {service} at {url} is unavailable")
 ```
 
 ---
 
-### 2. SRE 实战
+## 🏗️ 实战：带重试的 API 客户端
 
-**日志爆满应急**：
-```bash
-# 不能直接 rm！（进程持有文件描述符，空间不释放）
-# 正确做法：清空文件
-> /var/log/nginx/access.log
+```python
+#!/usr/bin/env python3
+"""API client with retry, logging, and custom exceptions."""
 
-# 安全审计：暴力破解检测
-grep "Failed password" /var/log/auth.log |     awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | head -10
+import logging
+import time
+import requests
 
-# Nginx 日志分析
-awk '{print $9}' /var/log/nginx/access.log | sort | uniq -c | sort -rn
-awk '$9 >= 500' /var/log/nginx/access.log | head -20
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class APIError(Exception):
+    """Base API exception."""
+    pass
+
+
+class RateLimitError(APIError):
+    """Rate limit exceeded."""
+    pass
+
+
+def api_call(url, max_retries=3, timeout=5):
+    """Make API call with retry and logging."""
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Request {url} (attempt {attempt + 1})")
+            resp = requests.get(url, timeout=timeout)
+
+            if resp.status_code == 429:
+                retry_after = int(resp.headers.get("Retry-After", 5))
+                logger.warning(f"Rate limited, waiting {retry_after}s")
+                time.sleep(retry_after)
+                continue
+
+            resp.raise_for_status()
+            logger.info(f"Success: {resp.status_code}")
+            return resp.json()
+
+        except requests.Timeout:
+            logger.error(f"Timeout on attempt {attempt + 1}")
+        except requests.HTTPError as e:
+            logger.error(f"HTTP error: {e}")
+            raise APIError(str(e))
+        except requests.RequestException as e:
+            logger.error(f"Request failed: {e}")
+
+        if attempt < max_retries - 1:
+            wait = 2 ** attempt
+            logger.info(f"Retrying in {wait}s...")
+            time.sleep(wait)
+
+    raise APIError(f"Failed after {max_retries} attempts")
+
+
+if __name__ == "__main__":
+    data = api_call("https://api.example.com/data")
+    print(data)
 ```
 
-
 ---
 
-## 💻 实战练习
+## 🧪 练习题
 
-### 练习 1：日志生命周期管理
+### 练习 1：日志轮转配置
 
-```bash
-#!/bin/bash
-# 配置 Nginx 日志轮转
-cat > /etc/logrotate.d/nginx-custom << 'EOF'
-/var/log/nginx/*.log {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0640 www-data adm
-    sharedscripts
-    postrotate
-        [ -f /var/run/nginx.pid ] && kill -USR1 $(cat /var/run/nginx.pid)
-    endscript
-}
-EOF
+配置 logging 模块，实现每天一个日志文件，保留 7 天。
 
-# 配置 journal 限制
-mkdir -p /etc/systemd/journald.conf.d
-cat > /etc/systemd/journald.conf.d/limits.conf << 'EOF'
-[Journal]
-SystemMaxUse=500M
-MaxRetentionSec=30day
-EOF
-systemctl restart systemd-journald
+<details>
+<summary>答案</summary>
+
+```python
+import logging
+from logging.handlers import TimedRotatingFileHandler
+
+handler = TimedRotatingFileHandler(
+    "app.log", when="midnight", backupCount=7
+)
+handler.setFormatter(logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s"
+))
+
+logger = logging.getLogger()
+logger.addHandler(handler)
 ```
+</details>
 
-### 练习 2：安全日志监控
+---
 
-```bash
-#!/bin/bash
-echo "暴力破解 (过去 1 小时):"
-grep "Failed password" /var/log/auth.log | \
-    awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | \
-    awk '$1 > 5 {printf "  IP: %-15s 失败: %d\n", $2, $1}'
+## 🧪 练习题
 
-echo "非工作时间登录:"
-grep "Accepted" /var/log/auth.log | \
-    awk -F'[ :]' '{if ($4 >= 22 || $4 < 6) print "  "$0}'
+### 练习 1：带超时的装饰器
+
+编写一个装饰器，为函数添加超时控制。
+
+<details>
+<summary>答案</summary>
+
+```python
+import signal
+
+def timeout(seconds):
+    def decorator(func):
+        def handler(signum, frame):
+            raise TimeoutError(f"Function timed out after {seconds}s")
+        def wrapper(*args, **kwargs):
+            signal.signal(signal.SIGALRM, handler)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+        return wrapper
+    return decorator
+
+@timeout(5)
+def slow_operation():
+    time.sleep(10)
 ```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+</details>
 
 ---
 
-## 📝 笔记
+## 📚 扩展阅读
 
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 09:00:48*  
-*Generated by Hermes Agent with review*
+- [Python logging 文档](https://docs.python.org/3/library/logging.html)
+- [PEP 3134 - Exception Chaining](https://peps.python.org/pep-3134/)

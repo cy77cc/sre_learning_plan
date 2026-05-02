@@ -1,233 +1,113 @@
-# Day 82: 实战项目：Docker 化 Web 应用
+# Day 82: 实战项目 — Docker 化 Web 应用
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：实战项目：Docker 化 Web 应用  
+> 📅 日期：2026-05-03
+> 📖 学习主题：实战项目：Docker 化 Web 应用
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 82 的学习后，你应该掌握：
-- 理解 实战项目：Docker 化 Web 应用 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 将完整 Web 应用 Docker 化
+- 掌握多容器编排
+- 理解开发环境 vs 生产环境的差异
 
 ---
 
-## 📖 详细知识点
+## 🏗️ 项目：Flask + Redis + Nginx
 
-### 1. Docker Compose — 多容器编排
+### 1. 应用代码
 
-#### 1.1 什么是 Docker Compose？
+```python
+# app.py
+from flask import Flask
+import redis
+import os
 
-Compose 用 YAML 文件定义多容器应用：
+app = Flask(__name__)
+redis_host = os.environ.get("REDIS_HOST", "localhost")
+r = redis.Redis(host=redis_host, port=6379)
 
-```yaml
-# docker-compose.yml
-version: '3.8'
+@app.route("/")
+def index():
+    count = r.incr("visits")
+    return f"Visits: {count}"
 
-services:
-  web:
-    build: .
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-      - redis
-    environment:
-      DATABASE_URL: postgresql://postgres:pass@db:5432/myapp
-      REDIS_URL: redis://redis:6379/0
-    restart: unless-stopped
+@app.route("/health")
+def health():
+    r.ping()
+    return "OK"
 
-  db:
-    image: postgres:15-alpine
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    environment:
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: myapp
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes
-    restart: unless-stopped
-
-volumes:
-  pgdata:
-  redis-data:
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
 ```
 
-```bash
-# 启动
-docker compose up -d
-
-# 查看状态
-docker compose ps
-
-# 查看日志
-docker compose logs -f web
-
-# 停止
-docker compose down
-
-# 停止并清理数据
-docker compose down -v
-
-# 重新构建并启动
-docker compose up -d --build
-```
-
-#### 1.2 健康检查
-
-```yaml
-services:
-  web:
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  db:
-    image: postgres:15
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  redis:
-    image: redis:7
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-```
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：多阶段构建优化
+### 2. Dockerfile
 
 ```dockerfile
-# Build stage
-FROM golang:1.21 AS builder
+FROM python:3.11-slim
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
-
-# Runtime stage
-FROM alpine:3.18
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
+EXPOSE 5000
+CMD ["python", "app.py"]
 ```
 
-### 练习 2：docker-compose 编排
+### 3. Nginx 配置
+
+```nginx
+server {
+    listen 80;
+    location / {
+        proxy_pass http://app:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### 4. docker-compose.yml
 
 ```yaml
-version: "3.8"
+version: '3.8'
 services:
-  web:
+  app:
     build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
     environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
-  db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+
   redis:
     image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
 volumes:
-  pgdata:
+  redis_data:
 ```
 
+### 5. 运行
+
+```bash
+docker compose up -d
+docker compose ps
+docker compose logs -f app
+```
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:19*  
-*Generated by Hermes Agent with review*
+- [Docker Compose 文档](https://docs.docker.com/compose/)
+- [多容器应用](https://docs.docker.com/compose/gettingstarted/)

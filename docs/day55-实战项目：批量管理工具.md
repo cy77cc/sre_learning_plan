@@ -1,211 +1,129 @@
-# Day 55: 实战项目：批量管理工具
+# Day 55: 实战项目 — 批量服务器管理工具
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：实战项目：批量管理工具  
+> 📅 日期：2026-05-02
+> 📖 学习主题：实战项目：批量服务器管理工具
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 55 的学习后，你应该掌握：
-- 理解 实战项目：批量管理工具 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 综合运用 Python 网络编程知识构建批量管理工具
+- 实现 SSH 批量执行、文件批量分发
+- 掌握并发执行和错误处理
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 实战项目：批量管理工具 — 核心概念
+### 1. SSH 批量执行
 
-实战项目：批量管理工具 是 SRE 工程师必须掌握的重要技能。
+```python
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import paramiko
 
-#### 1.1 基础知识
 
-- 理解实战项目：批量管理工具的基本原理和架构
-- 掌握常用命令和操作方式
-- 能够在实际工作场景中应用
+def ssh_exec(host, command, username="root", timeout=10):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(host, username=username, timeout=timeout)
+        stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
+        output = stdout.read().decode()
+        exit_code = stdout.channel.recv_exit_status()
+        return host, exit_code, output, ""
+    except Exception as e:
+        return host, -1, "", str(e)
+    finally:
+        client.close()
 
-#### 1.2 SRE 实战场景
 
-在生产环境中，实战项目：批量管理工具的应用场景包括：
-- **日常运维**：定期检查和维护
-- **故障排查**：快速定位和解决问题
-- **自动化**：编写脚本实现自动化管理
-
-```bash
-# 基础操作示例
-# 根据实战项目：批量管理工具主题执行相关命令
-# 参考官方文档获取详细信息
+# 批量执行
+hosts = ["10.0.1.10", "10.0.1.11", "10.0.2.10"]
+with ThreadPoolExecutor(max_workers=10) as executor:
+    futures = {executor.submit(ssh_exec, h, "uptime"): h for h in hosts}
+    for future in as_completed(futures):
+        host, code, output, error = future.result()
+        if error:
+            print(f"FAIL {host}: {error}")
+        else:
+            print(f"OK {host}: {output.strip()}")
 ```
 
----
+### 2. 文件批量分发
 
-### 2. 实际操作
-
-#### 2.1 基础练习
-
-```bash
-# 练习 1：基础命令
-# 查阅官方文档，完成基本操作
+```python
+def ssh_scp(host, local_path, remote_path, username="root"):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(host, username=username)
+    sftp = client.open_sftp()
+    sftp.put(local_path, remote_path)
+    sftp.close()
+    client.close()
 ```
 
-#### 2.2 进阶练习
-
-```bash
-# 练习 2：结合实际场景
-# 尝试在测试环境中模拟生产问题
-```
-
----
-
-### 3. 常见问题
-
-| 问题 | 排查思路 |
-|------|---------|
-| 服务无法启动 | 检查日志、端口占用、配置文件 |
-| 性能下降 | 监控资源使用、检查瓶颈 |
-| 连接失败 | 检查网络、防火墙、服务状态 |
-
----
-
-### 4. 扩展阅读
-
-- 查阅官方文档获取最准确的信息
-- 参考相关技术博客和教程
-- 在测试环境中反复练习
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：主机监控脚本
+### 3. 实战：批量管理 CLI
 
 ```python
 #!/usr/bin/env python3
-import psutil, json, datetime
+"""Batch server management tool."""
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
-        try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
+import argparse
+import paramiko
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-data = check_system()
-print(json.dumps(data, indent=2))
 
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+def run_on_host(host, command, username, timeout):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(host, username=username, timeout=timeout)
+        stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
+        output = stdout.read().decode()
+        error = stderr.read().decode()
+        exit_code = stdout.channel.recv_exit_status()
+        return host, exit_code, output, error
+    except Exception as e:
+        return host, -1, "", str(e)
+    finally:
+        client.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Batch server management")
+    parser.add_argument("command", help="Command to execute")
+    parser.add_argument("-f", "--hosts-file", required=True, help="Hosts file (one per line)")
+    parser.add_argument("-u", "--username", default="root")
+    parser.add_argument("-t", "--timeout", type=int, default=10)
+    parser.add_argument("-w", "--workers", type=int, default=10)
+    args = parser.parse_args()
+
+    with open(args.hosts_file) as f:
+        hosts = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
+    print(f"Executing on {len(hosts)} hosts: {args.command}\n")
+
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
+        futures = {
+            executor.submit(run_on_host, h, args.command, args.username, args.timeout): h
+            for h in hosts
+        }
+        for future in as_completed(futures):
+            host, code, output, error = future.result()
+            if error:
+                print(f"FAIL {host}: {error}")
+            else:
+                print(f"OK {host} (exit={code}):\n{output}")
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-### 练习 2：日志分析工具
-
-```python
-import re
-from collections import Counter
-
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
-
-analyze_nginx_log("/var/log/nginx/access.log")
-```
-
-
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 13:37:09*  
-*Generated by Hermes Agent with review*
+- [paramiko 文档](https://docs.paramiko.org/)
+- [并发最佳实践](https://docs.python.org/3/library/concurrent.futures.html)

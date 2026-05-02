@@ -1,188 +1,291 @@
-# Day 43: Python 环境搭建
+# Day 43: Python 环境搭建与开发规范
 
-> 📅 日期：2026-04-29  
-> 📖 学习主题：Python 环境搭建  
+> 📅 日期：2026-05-02
+> 📖 学习主题：Python 环境搭建与开发规范
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 43 的学习后，你应该掌握：
-- 理解 Python 环境搭建 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 掌握 Python 虚拟环境（venv）的创建和使用
+- 理解 pip 的依赖管理机制
+- 掌握 PEP 8 编码规范
+- 了解 Python 在 SRE 工作中的典型应用场景
 
 ---
 
 ## 📖 详细知识点
 
-### 1. Python 环境搭建
+### 1. Python 环境管理
 
-#### 1. 基础知识
+#### 1.1 为什么需要虚拟环境
 
-Python 是 SRE 最常用的脚本语言之一。
+系统只有一个 Python，但不同项目需要不同版本的包。虚拟环境为每个项目提供隔离的 Python 环境。
 
-#### 2. 核心概念
+```bash
+# 创建虚拟环境
+python3 -m venv ~/envs/sre-tools
 
-- 变量和数据结构（列表、字典、元组、集合）
-- 控制流程（if/for/while）
-- 函数和模块
-- 异常处理（try/except）
-- 文件和 I/O 操作
+# 激活
+source ~/envs/sre-tools/bin/activate
 
-```python
-# 示例：读取配置文件
-import json
+# 验证
+which python3    # ~/envs/sre-tools/bin/python3
+python3 --version
 
-with open('config.json') as f:
-    config = json.load(f)
+# 安装包
+pip install requests boto3 prometheus-client
 
-print(f"Server: {config['host']}:{config['port']}")
+# 导出依赖
+pip freeze > requirements.txt
+
+# 从 requirements.txt 安装
+pip install -r requirements.txt
+
+# 退出虚拟环境
+deactivate
 ```
 
-#### 3. SRE 实战
+#### 1.2 pip 依赖管理
 
-- 主机监控脚本（psutil 库）
-- 日志分析工具
-- API 调用（requests 库）
+```bash
+# 查看已安装包
+pip list
 
-#### 4. 练习
+# 检查过期包
+pip list --outdated
 
-- 编写 Python 脚本监控系统资源
-- 解析 JSON 配置文件
-- 调用 REST API
+# 安装指定版本
+pip install "requests>=2.28,<3.0"
+pip install "django==4.2.0"
 
+# 卸载包
+pip uninstall requests
+
+# 离线安装（生产环境无网络时）
+pip download -d ./packages -r requirements.txt
+pip install --no-index --find-links ./packages -r requirements.txt
+```
+
+### 2. PEP 8 编码规范
+
+#### 2.1 命名规范
+
+| 类型 | 规范 | 示例 |
+|------|------|------|
+| 变量/函数 | snake_case | `get_user_info` |
+| 常量 | UPPER_SNAKE_CASE | `MAX_RETRIES = 3` |
+| 类 | PascalCase | `class HealthChecker` |
+| 私有变量 | `_leading_underscore` | `_internal_state` |
+
+#### 2.2 格式规范
+
+```python
+# 正确写法
+def calculate_metrics(cpu, memory, disk):
+    """Calculate system metrics.
+
+    Args:
+        cpu: CPU usage (0-100)
+        memory: Memory usage (0-100)
+        disk: Disk usage (0-100)
+
+    Returns:
+        dict with all metrics
+    """
+    return {
+        "cpu": cpu,
+        "memory": memory,
+        "disk": disk,
+    }
+
+
+class ServerMonitor:
+    """Server health monitor."""
+
+    MAX_RETRIES = 3  # 类常量用大写
+
+    def __init__(self, host):
+        self._host = host  # 私有变量用下划线前缀
+        self._metrics = {}
+
+    def check_health(self):
+        """Check server health status."""
+        pass
+
+
+# 导入顺序：标准库 -> 第三方 -> 本地
+import os
+import sys
+
+import requests
+import boto3
+
+from .utils import format_output
+```
+
+#### 2.3 自动格式化工具
+
+```bash
+# 安装
+pip install black flake8 isort mypy
+
+# 自动格式化代码
+black script.py
+
+# 排序 import
+isort script.py
+
+# 检查代码风格
+flake8 script.py
+
+# 类型检查
+mypy script.py
+```
+
+### 3. SRE 中的 Python 应用
+
+Python 在 SRE 中的典型应用：
+1. 运维脚本（替代 Bash 处理复杂逻辑）
+2. API 集成（调用 AWS、阿里云、K8s API）
+3. 数据处理（日志分析、指标聚合）
+4. 自动化工具（部署、备份、监控）
+5. Web 服务（FastAPI/Flask 构建管理后台）
 
 ---
 
-## 💻 实战练习
+## 🏗️ 实战：搭建 Python SRE 工具项目
 
-### 练习 1：主机监控脚本
+```bash
+# 1. 创建项目结构
+mkdir -p sre-tools/{src,tests,scripts}
+cd sre-tools
+
+# 2. 创建虚拟环境
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. 安装开发工具
+pip install black flake8 isort pytest requests
+
+# 4. 创建配置文件 pyproject.toml
+cat > pyproject.toml << 'EOF'
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+EOF
+```
 
 ```python
+# src/health_check.py
 #!/usr/bin/env python3
-import psutil, json, datetime
+"""Server health check tool."""
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
-        try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
+import requests
+import sys
+from typing import Dict
 
-data = check_system()
-print(json.dumps(data, indent=2))
 
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+def check_endpoint(url: str, timeout: int = 5) -> Dict:
+    """Check an HTTP endpoint."""
+    try:
+        resp = requests.get(url, timeout=timeout)
+        return {
+            "url": url,
+            "status": resp.status_code,
+            "healthy": resp.status_code == 200,
+        }
+    except requests.RequestException as e:
+        return {"url": url, "status": None, "healthy": False, "error": str(e)}
+
+
+def main():
+    endpoints = [
+        "http://localhost:8080/health",
+        "http://localhost:3306",
+        "http://localhost:6379",
+    ]
+
+    all_healthy = True
+    for url in endpoints:
+        result = check_endpoint(url)
+        status = "OK" if result["healthy"] else "FAIL"
+        print(f"{status} {url} -> {result['status']}")
+        if not result["healthy"]:
+            all_healthy = False
+
+    sys.exit(0 if all_healthy else 1)
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-### 练习 2：日志分析工具
+---
+
+## 🧪 练习题
+
+### 练习 1：依赖冲突解决
+
+项目中同时需要 requests==2.28 和 boto3>=1.26，但 boto3 依赖 requests>=2.31。如何解决？
+
+<details>
+<summary>答案</summary>
+
+使用 pip-tools 或 poetry 进行依赖解析，或者升级 requests 到兼容版本：
+```bash
+pip install "requests>=2.31" "boto3>=1.26"
+# 或者用 poetry/pip-compile 自动解决版本冲突
+```
+</details>
+
+---
+
+## 🧪 练习题
+
+### 练习 1：环境检测脚本
+
+编写一个脚本，检查 Python 版本和依赖包是否满足要求。
+
+<details>
+<summary>答案</summary>
 
 ```python
-import re
-from collections import Counter
+import sys
+import importlib
 
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
+def check_env():
+    # Python version
+    v = sys.version_info
+    if v < (3, 9):
+        print(f"FAIL: need Python 3.9+, got {v.major}.{v.minor}")
+        return False
+    print(f"OK: Python {v.major}.{v.minor}")
 
-analyze_nginx_log("/var/log/nginx/access.log")
+    # Required packages
+    for pkg in ["requests", "boto3", "pyyaml"]:
+        try:
+            mod = importlib.import_module(pkg)
+            ver = getattr(mod, "__version__", "unknown")
+            print(f"OK: {pkg} {ver}")
+        except ImportError:
+            print(f"FAIL: {pkg} not installed")
+            return False
+    return True
+
+if __name__ == "__main__":
+    sys.exit(0 if check_env() else 1)
 ```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+</details>
 
 ---
 
-## 📝 笔记
+## 📚 扩展阅读
 
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-04-29 09:01:58*  
-*Generated by Hermes Agent with review*
+- [PEP 8 官方文档](https://peps.python.org/pep-0008/)
+- [Black 代码格式化工具](https://black.readthedocs.io/)
+- [Python 虚拟环境指南](https://docs.python.org/3/library/venv.html)

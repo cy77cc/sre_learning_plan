@@ -1,261 +1,152 @@
-# Day 40: HTTP/HTTPS 协议深入
+# Day 40: HTTP 与 HTTPS 协议深入
 
-> 📅 日期：2026-04-25  
-> 📖 学习主题：HTTP/HTTPS 协议深入  
+> 📅 日期：2026-04-27
+> 📖 学习主题：HTTP 与 HTTPS 协议深入
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 40 的学习后，你应该掌握：
-- 理解 HTTP/HTTPS 协议深入 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 HTTP 协议的工作原理（请求/响应模型）
+- 掌握 HTTP 方法、状态码、头部字段的含义
+- 理解 HTTPS 的 TLS 握手过程
+- 能使用 curl 进行 HTTP 调试
+- 理解 HTTP/1.1、HTTP/2、HTTP/3 的演进
 
 ---
 
-## 📖 详细知识点
+## 📖 HTTP 协议基础
 
-### 1. 学习主题概述
+### 1. HTTP 请求/响应模型
 
-HTTP/HTTPS 协议深入
-
-#### 1.1 什么是进程
-
-进程（Process）是运行中的程序，是操作系统进行资源分配和调度的基本单位。每个进程都有独立的内存空间、文件描述符和进程ID（PID）。
-
-#### 1.2 进程的状态
-
-| 状态 | 含义 |
-|------|------|
-| R (Running) | 正在运行或就绪运行 |
-| S (Sleeping) | 可中断的睡眠状态 |
-| D (Disk Sleep) | 不可中断的睡眠状态 |
-| T (Stopped) | 停止状态 |
-| Z (Zombie) | 僵尸进程 |
-
----
-
-### 2. 进程管理命令
-
-#### 2.1 查看进程
-
-```bash
-# 查看所有进程（完整格式）
-ps aux
-
-# 查看进程树
-ps -ef --forest
-
-# 实时显示进程（类似任务管理器）
-top
-htop
-
-# 查看特定进程
-ps aux | grep nginx
-pgrep -f nginx
+```
+客户端                    服务器
+  │                         │
+  │  HTTP Request           │
+  │ ──────────────────────→│
+  │  GET /index.html HTTP/1.1│
+  │  Host: example.com      │
+  │                         │
+  │  HTTP Response          │
+  │ ←────────────────────── │
+  │  HTTP/1.1 200 OK        │
+  │  Content-Type: text/html │
+  │  Content-Length: 1234    │
+  │                         │
+  │  <html>...</html>        │
 ```
 
-#### 2.2 进程状态与信号
+### 2. HTTP 方法
 
-| 信号 | 编号 | 含义 |
-|------|------|------|
-| SIGTERM | 15 | 请求终止（优雅退出） |
-| SIGKILL | 9 | 强制终止 |
-| SIGSTOP | 19 | 暂停进程 |
-| SIGCONT | 18 | 继续运行 |
+| 方法 | 用途 | 幂等 | 安全 | 示例 |
+|------|------|------|------|------|
+| GET | 获取资源 | ✅ | ✅ | `GET /api/users` |
+| POST | 创建资源 | ❌ | ❌ | `POST /api/users` |
+| PUT | 替换资源 | ✅ | ❌ | `PUT /api/users/1` |
+| PATCH | 部分更新 | ❌ | ❌ | `PATCH /api/users/1` |
+| DELETE | 删除资源 | ✅ | ❌ | `DELETE /api/users/1` |
+| HEAD | 获取头部（无体） | ✅ | ✅ | `HEAD /api/health` |
+| OPTIONS | 查询支持的方法 | ✅ | ✅ | `OPTIONS /api/users` |
 
-```bash
-# 发送信号
-kill -15 <PID>    # 优雅终止
-kill -9 <PID>     # 强制终止
-kill -STOP <PID>  # 暂停进程
-kill -CONT <PID>  # 继续运行
+**幂等性**：同一请求执行多次与执行一次效果相同。
+**安全性**：请求不会修改服务器状态。
 
-# 批量操作
-killall nginx       # 按名称终止
-pkill -f nginx      # 按名称终止（支持正则）
+### 3. HTTP 状态码
+
+| 范围 | 含义 | 常见状态码 |
+|------|------|-----------|
+| 1xx | 信息 | 100 Continue |
+| 2xx | 成功 | 200 OK, 201 Created, 204 No Content |
+| 3xx | 重定向 | 301 Moved, 302 Found, 304 Not Modified |
+| 4xx | 客户端错误 | 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found |
+| 5xx | 服务器错误 | 500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable |
+
+### 4. 常用头部
+
 ```
+请求头：
+  Host: example.com          # 目标主机（HTTP/1.1 必需）
+  User-Agent: curl/7.68.0    # 客户端标识
+  Accept: application/json    # 期望的响应格式
+  Authorization: Bearer xxx   # 认证令牌
+  Content-Type: application/json  # 请求体格式
+  Content-Length: 123         # 请求体长度
+  Connection: keep-alive      # 保持连接
 
-#### 2.3 进程优先级
-
-```bash
-# 查看优先级
-ps -eo pid,ni,cmd
-
-# 启动低优先级进程
-nice -n 10 ./script.sh
-
-# 调整运行中进程优先级
-renice -n 5 -p <PID>
+响应头：
+  Content-Type: text/html; charset=utf-8
+  Content-Length: 1234
+  Cache-Control: max-age=3600
+  Set-Cookie: session=abc123; HttpOnly; Secure
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
 ```
 
 ---
 
-### 3. 实战练习
+## HTTPS 与 TLS
 
-#### 练习 1：基础进程查看
+### 5. TLS 握手过程
 
-```bash
-# 1. 列出当前用户的所有进程
-ps -u $USER
-
-# 2. 按CPU使用率排序
-ps aux --sort=-%cpu
-
-# 3. 查看进程的父子关系
-ps -ef | head -20
+```
+客户端                              服务器
+  │                                   │
+  │  ClientHello                      │
+  │  (支持的TLS版本、加密套件)         │
+  │ ────────────────────────────────→│
+  │                                   │
+  │  ServerHello                      │
+  │  (选择的TLS版本、加密套件)         │
+  │  Certificate (服务器证书)          │
+  │  ServerKeyExchange                │
+  │ ←─────────────────────────────── │
+  │                                   │
+  │  ClientKeyExchange                │
+  │  ChangeCipherSpec                 │
+  │  Finished                         │
+  │ ────────────────────────────────→│
+  │                                   │
+  │  ChangeCipherSpec                 │
+  │  Finished                         │
+  │ ←─────────────────────────────── │
+  │                                   │
+  │  ←── 加密通信开始 ──→              │
 ```
 
-#### 练习 2：进程控制
+### 6. SRE 中的 HTTP 调试
 
 ```bash
-# 1. 启动一个后台进程
-sleep 300 &
+# curl 调试技巧
+curl -v https://example.com        # 显示完整请求/响应
+curl -I https://example.com        # 只显示响应头
+curl -s -o /dev/null -w "%{http_code}" https://example.com  # 只输出状态码
+curl -s -o /dev/null -w "DNS: %{time_namelookup}s\nConnect: %{time_connect}s\nTTFB: %{time_starttransfer}s\nTotal: %{time_total}s\n" https://example.com
 
-# 2. 查看后台任务
-jobs -l
+# 时间指标：
+# time_namelookup: DNS 解析时间
+# time_connect: TCP 连接时间
+# time_starttransfer: TTFB（首字节时间）
+# time_total: 总时间
 
-# 3. 将后台任务调到前台
-fg %1
-
-# 4. 暂停当前任务，按Ctrl+Z
-```
-
-#### 练习 3：进程监控
-
-```bash
-# 1. 实时监控进程，按内存排序
-top -o %MEM
-
-# 2. 查看某个用户的进程统计
-ps -U www-data -o pid,vsz,rss,pcpu,pmem,comm
-
-# 3. 计算进程数
-ps aux | wc -l
+# 查看证书信息
+echo | openssl s_client -connect example.com:443 2>/dev/null | openssl x509 -noout -dates -subject -issuer
 ```
 
 ---
 
-### 4. 常见问题
+## 🧪 练习题
 
-| 问题 | 解决方案 |
-|------|----------|
-| 进程僵死无法终止 | 使用 `kill -9`，检查父进程是否未wait |
-| 僵尸进程过多 | 找到父进程并修复或终止父进程 |
-| CPU 100% | 使用 `top` 定位高CPU进程，分析代码 |
-| 进程意外退出 | 检查 dmesg 日志、OOM Killer |
+<details>
+<summary>301 vs 302 的区别？</summary>
 
----
-
-### 5. 扩展阅读
-
-- `man ps`、`man top`、`man kill` — 命令手册
-- `/proc/<PID>/` — 进程详细信息目录
-- `pstree` — 进程树形视图
-- 进程组与会话：`ps -o pid,pgid,sid,comm`
-
+301 是永久重定向（浏览器会缓存），302 是临时重定向（每次都问服务器）。
+SEO 角度：301 会转移权重，302 不会。
+</details>
 
 ---
 
-## 💻 实战练习
+## 📚 扩展阅读
 
-### 练习 1：生产环境进程排查
-
-**场景**：服务器响应缓慢，5 分钟内定位问题。
-
-```bash
-#!/bin/bash
-echo "===== 进程排查报告 $(date) ====="
-echo "负载: $(uptime)"
-echo ""
-echo "Top 10 CPU:"
-ps aux --sort=-%cpu | head -11
-echo ""
-echo "僵尸进程:"
-zombies=$(ps aux | awk '$8 ~ /Z/' | wc -l)
-echo "数量: $zombies"
-[ "$zombies" -gt 0 ] && ps aux | awk '$8 ~ /Z/'
-echo ""
-echo "进程状态分布:"
-ps aux | awk '{print $8}' | sort | uniq -c | sort -rn
-```
-
-### 练习 2：进程树分析
-
-```bash
-pstree -p -a
-ps -o pid,ppid,cmd -f --forest | grep -A5 nginx
-cat /proc/$(pgrep nginx | head -1)/status
-```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-04-25 10:58:14*  
-*Generated by Hermes Agent with review*
+- [MDN HTTP 文档](https://developer.mozilla.org/en-US/docs/Web/HTTP)
+- [TLS 1.3 RFC 8446](https://datatracker.ietf.org/doc/html/rfc8446)

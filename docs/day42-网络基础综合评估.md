@@ -1,188 +1,187 @@
-# Day 42: 阶段总结：网络基础综合能力评估
+# Day 42: 网络基础综合评估
 
-> 📅 日期：2026-04-28  
-> 📖 学习主题：阶段总结：网络基础综合能力评估  
+> 📅 日期：2026-05-02
+> 📖 学习主题：网络基础综合评估
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 42 的学习后，你应该掌握：
-- 理解 阶段总结：网络基础综合能力评估 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 综合评估前三周网络知识（OSI 模型、TCP/IP、DNS、HTTP）
+- 能独立完成网络故障排查
+- 掌握网络工具的实战组合使用
 
 ---
 
-## 📖 详细知识点
+## 📖 综合知识回顾
 
-### Day {day} 复习与实战
+### 1. 网络分层回顾
 
-#### 场景 1：新购云服务器从零配置
-
-```bash
-# 1. 系统更新
-sudo apt update && sudo apt upgrade -y
-
-# 2. 创建用户
-sudo useradd -m -s /bin/bash -G sudo sreuser
-
-# 3. 安装基础工具
-sudo apt install -y curl wget vim git htop tree net-tools
-
-# 4. 配置防火墙
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
+```
+应用层 (7)    HTTP, DNS, SMTP, FTP        ← 用户看到的协议
+表示层 (6)    TLS, SSL, JPEG              ← 数据格式和加密
+会话层 (5)    NetBIOS, RPC                ← 会话管理
+传输层 (4)    TCP, UDP                    ← 端到端传输
+网络层 (3)    IP, ICMP, ARP               ← 路由和寻址
+数据链路层(2)  Ethernet, WiFi              ← 帧传输
+物理层 (1)    光纤, 电缆, 无线电            ← 比特流
 ```
 
-#### 场景 2：日志分析挑战
+### 2. TCP vs UDP 对比
 
-```bash
-# 找出暴力破解的 IP
-grep "Failed password" /var/log/auth.log | \
-    awk '{{print $(NF-3)}}' | sort | uniq -c | sort -rn | head -10
+| 特性 | TCP | UDP |
+|------|-----|-----|
+| 连接 | 面向连接（三次握手） | 无连接 |
+| 可靠性 | 可靠（重传、排序、确认） | 不可靠 |
+| 拥塞控制 | 有 | 无 |
+| 头部开销 | 20 字节 | 8 字节 |
+| 速度 | 较慢 | 较快 |
+| 适用场景 | 文件传输、Web、邮件 | 视频、游戏、DNS |
 
-# 分析 Nginx 日志
-awk '{{print $9}}' /var/log/nginx/access.log | sort | uniq -c | sort -rn
+### 3. 常见端口速查
 
-# 统计磁盘使用
-du -sh /var/log/* | sort -rh | head -10
+| 端口 | 协议 | 用途 |
+|------|------|------|
+| 21 | FTP | 文件传输 |
+| 22 | SSH | 安全远程登录 |
+| 25 | SMTP | 邮件发送 |
+| 53 | DNS | 域名解析 |
+| 80 | HTTP | Web 服务 |
+| 443 | HTTPS | 安全 Web |
+| 3306 | MySQL | 数据库 |
+| 6379 | Redis | 缓存 |
+| 8080 | HTTP Alt | Web 代理 |
+
+### 4. TCP 三次握手与四次挥手
+
 ```
+三次握手（建立连接）：
+  Client                    Server
+    │                         │
+    │ ─── SYN (seq=x) ──────→│
+    │                         │
+    │ ←── SYN+ACK (seq=y,    │
+    │      ack=x+1) ─────────│
+    │                         │
+    │ ─── ACK (ack=y+1) ───→│
+    │                         │
+    │ ←── 数据传输 ──→        │
 
-#### 场景 3：权限排查
-
-```bash
-# 排查 403 Forbidden
-ls -la /var/www/html/
-namei -l /var/www/html/index.html
-getfacl /var/www/html/
+四次挥手（关闭连接）：
+  Client                    Server
+    │                         │
+    │ ─── FIN ──────────────→│
+    │ ←── ACK ───────────────│
+    │                         │
+    │ ←── FIN ───────────────│
+    │ ─── ACK ──────────────→│
+    │                         │
+    │        TIME_WAIT (2MSL) │
 ```
-
-#### 自我评估
-
-- [ ] 能否不查阅文档完成常用文件操作？
-- [ ] 能否独立排查权限问题？
-- [ ] 能否编写基本的 Shell 脚本？
-- [ ] 能否分析日志找出问题？
-
 
 ---
 
-## 💻 实战练习
+## 🏗️ 网络故障排查流程
 
-### 练习 1：网络故障排查脚本
+```bash
+# 接到告警：服务不可达
 
-**场景**：用户报告"网站访问慢"，系统化排查。
+# 第 1 步：DNS 解析
+dig example.com +short
+nslookup example.com
+# 如果解析失败 → DNS 问题
+
+# 第 2 步：连通性
+ping example.com
+# 如果不通 → 网络不通或 ICMP 被禁
+
+# 第 3 步：端口连通性
+nc -zv example.com 443
+# 如果不通 → 防火墙或服务未启动
+
+# 第 4 步：HTTP 层面
+curl -v https://example.com
+# 如果返回 5xx → 服务端错误
+# 如果返回 4xx → 客户端/认证问题
+# 如果超时 → 服务挂起或网络慢
+
+# 第 5 步：路由跟踪
+mtr example.com
+# 查看在哪一跳丢包
+
+# 第 6 步：抓包分析
+sudo tcpdump -i eth0 host example.com -w /tmp/capture.pcap
+# 用 wireshark 打开分析
+
+# 第 7 步：检查本地状态
+ss -tlnp          # 本地监听端口
+ss -tnp           # 已建立的连接
+ip addr show      # IP 地址配置
+ip route show     # 路由表
+```
+
+---
+
+## 🧪 综合练习
+
+### 练习 1：诊断脚本
+
+编写一个脚本，自动诊断网络连通性问题。
+
+<details>
+<summary>答案</summary>
 
 ```bash
 #!/bin/bash
-TARGET="example.com"
-echo "=== 网络排查: $TARGET ==="
+TARGET="${1:?用法: $0 <hostname>}"
 
-# 1. DNS
-echo "DNS: $(dig +short $TARGET A 2>/dev/null || echo 'FAILED')"
+echo "=== 网络诊断: $TARGET ==="
 
-# 2. 连通性
-ping -c 3 -W 2 $TARGET 2>&1 | tail -1
+# DNS
+echo -n "DNS 解析: "
+if ip=$(dig +short "$TARGET" | head -1); then
+    echo "✅ $ip"
+else
+    echo "❌ 解析失败"; exit 1
+fi
 
-# 3. 路由
-traceroute -m 15 -w 2 $TARGET 2>/dev/null | head -10
+# Ping
+echo -n "Ping: "
+if ping -c 1 -W 2 "$TARGET" &>/dev/null; then
+    echo "✅ 通"
+else
+    echo "❌ 不通"
+fi
 
-# 4. 端口
-for port in 80 443; do
-    timeout 2 bash -c "echo > /dev/tcp/$TARGET/$port" 2>/dev/null && \
-        echo "端口 $port: OK" || echo "端口 $port: FAIL"
-done
+# Port 443
+echo -n "端口 443: "
+if nc -zv "$TARGET" 443 2>&1 | grep -q succeeded; then
+    echo "✅ 开放"
+else
+    echo "❌ 关闭"
+fi
 
-# 5. HTTP
-curl -s -o /dev/null -w "HTTP: %{{http_code}}, Time: %{{time_total}}s\n" "http://$TARGET"
+# HTTP
+echo -n "HTTP: "
+code=$(curl -s -o /dev/null -w "%{http_code}" "https://$TARGET" 2>/dev/null)
+if [[ "$code" == "200" ]]; then
+    echo "✅ $code"
+else
+    echo "❌ $code"
+fi
 
-# 6. TCP 状态
-ss -tan | awk 'NR>1 {{print $1}}' | sort | uniq -c | sort -rn
+# 时间分解
+echo ""
+echo "=== 时间分解 ==="
+curl -s -o /dev/null -w "DNS: %{time_namelookup}s\nConnect: %{time_connect}s\nTTFB: %{time_starttransfer}s\nTotal: %{time_total}s\n" "https://$TARGET"
 ```
-
-### 练习 2：抓包分析
-
-```bash
-# 抓取 HTTP 流量
-sudo tcpdump -i any -n port 80 -A 2>/dev/null | head -50
-
-# 保存到文件用 Wireshark 分析
-sudo tcpdump -i any -n port 443 -w /tmp/capture.pcap
-
-# 分析 TCP 握手
-sudo tcpdump -i any -n 'tcp[tcpflags] & (tcp-syn|tcp-ack) != 0' -c 10
-```
-
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-04-28 09:02:23*  
-*Generated by Hermes Agent with review*
+- [TCP/IP Illustrated](https://www.pearson.com/en-us/subject-catalog/p/tcp-ip-illustrated-volume-1-the-protocols/P200000003057/9780134927883)
+- [Wireshark 官方教程](https://www.wireshark.org/docs/)
+- [mtr 文档](https://github.com/traviscross/mtr)

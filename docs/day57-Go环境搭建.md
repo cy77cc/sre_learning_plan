@@ -1,308 +1,388 @@
-# Day 57: Go 环境搭建
+# Day 57: Go 环境搭建与项目初始化
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Go 环境搭建  
-> ⏰ 计划学习时间：2-3 小时
+> 📅 日期：2026-05-02
+> 📖 学习主题：Go 环境搭建
+> ⏰ 计划学习时间：3-4 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 57 的学习后，你应该掌握：
-- 理解 Go 环境搭建 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Go 的设计哲学和 SRE 领域的应用场景
+- 掌握 Go 编译器的安装原理和交叉编译机制
+- 深入理解 Go Modules 依赖管理机制
+- 完成从环境搭建到完整项目初始化的全流程
 
 ---
 
 ## 📖 详细知识点
 
-### 1. Go 语言简介
+### 1. Go 语言深度解析
 
 #### 1.1 为什么 SRE 要学 Go？
 
-Go（Golang）是 Google 于 2009 年发布的开源编程语言，由 Robert Griesemer、Rob Pike 和 Ken Thompson 设计。在 SRE 和云原生领域，Go 已经是事实上的标准语言：
+Go（Golang）由 Google 于 2009 年发布，在云原生领域已是事实标准。几乎所有核心基础设施项目都用 Go 编写：
 
-| 项目 | 语言 | 说明 |
-|------|------|------|
-| **Docker** | Go | 容器运行时 |
-| **Kubernetes** | Go | 容器编排平台 |
-| **Prometheus** | Go | 监控系统 |
-| **Terraform** | Go | 基础设施即代码 |
-| **etcd** | Go | 分布式键值存储 |
-| **Consul** | Go | 服务发现与配置 |
-| **Envoy** | C++ | 但其控制面多用 Go |
-| **Helm** | Go | K8s 包管理器 |
+| 项目 | 说明 | Go 版本要求 |
+|------|------|------------|
+| Docker | 容器运行时 | 1.18+ |
+| Kubernetes | 容器编排平台 | 1.21+ |
+| Prometheus | 监控系统 | 1.20+ |
+| Terraform | IaC 工具 | 1.19+ |
+| etcd | 分布式 K-V 存储 | 1.19+ |
+| Consul | 服务发现与配置 | 1.20+ |
 
-**选择 Go 而非 Python 做运维工具的原因**：
-```
-✅ 编译为单一静态二进制文件，部署无需依赖
-✅ 原生并发（goroutine）比 Python 线程高效得多
-✅ 强类型，大型项目可维护性更好
-✅ 启动速度毫秒级，适合 CLI 工具和微服务
-✅ 垃圾回收，比 C/C++ 开发效率高
-✅ 交叉编译简单（GOOS=linux GOARCH=arm64 go build）
-```
-
-#### 1.2 Go 的核心设计哲学
+**Go 对比 Python/Bash 的核心优势：**
 
 ```
-简单胜于复杂      — 25 个关键字，语法简单，新人 1 周上手
-组合胜于继承      — 用 interface + struct 组合，而非类继承
-显式胜于隐式      — 错误处理用返回值，不用异常
-并发是一等公民    — goroutine + channel 原生支持
+✅ 编译为单一静态二进制文件 → 部署零依赖，适合 Alpine 极简镜像
+✅ 原生 goroutine 并发 → 初始栈仅 2KB，轻松百万级并发
+✅ 强类型 + 编译时检查 → 大型项目可维护性远超 Python
+✅ 启动速度毫秒级 → 适合 CLI 工具和微服务 sidecar
+✅ 交叉编译一行搞定 → GOOS=linux GOARCH=arm64 go build
+✅ GC 内存安全 → 相比 C/C++ 开发效率显著提升
 ```
 
-### 2. Go 环境搭建
+#### 1.2 Go 运行时架构
 
-#### 2.1 安装 Go
+```
+Go 运行时核心组件：
+┌──────────────────────────────────────────┐
+│ GMP 调度器 — G=goroutine, M=OS线程, P=逻辑处理器 │
+│ 负责将 goroutine 分配到 OS 线程上执行          │
+├──────────────────────────────────────────┤
+│ 垃圾回收器 — 三色标记法，并发标记，STW < 1ms      │
+├──────────────────────────────────────────┤
+│ 内存分配器 — tcmalloc 思想，mcache→mcentral→mheap│
+│ 小对象(≤32KB) 无锁分配                         │
+├──────────────────────────────────────────┤
+│ 网络轮询器 — epoll/kqueue 封装，非阻塞 I/O       │
+│ 网络 I/O 不会阻塞 goroutine                    │
+└──────────────────────────────────────────┘
+```
+
+### 2. Go 编译器安装
+
+#### 2.1 官方二进制包安装（推荐）
 
 ```bash
-# 方法 1：官方二进制包安装（推荐）
-curl -fsSL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xzf -
+# 步骤 1：下载并解压
+curl -fsSL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz \
+  | sudo tar -C /usr/local -xzf -
 
-# 添加到 PATH（写入 ~/.bashrc 或 ~/.zshrc）
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-echo 'export GOPATH=$HOME/go' >> ~/.bashrc
-echo 'export PATH=$PATH:$GOPATH/bin' >> ~/.bashrc
+# 步骤 2：配置环境变量
+cat >> ~/.bashrc << 'EOF'
+export PATH=$PATH:/usr/local/go/bin
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOPATH/bin
+export GOPROXY=https://goproxy.cn,direct
+EOF
 source ~/.bashrc
 
-# 验证安装
+# 步骤 3：验证
 go version
 # go version go1.22.0 linux/amd64
 ```
 
-**方法 2：包管理器安装**
+**关键环境变量解析：**
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| GOROOT | Go 安装目录 | /usr/local/go |
+| GOPATH | 工作区目录 | ~/go |
+| GOBIN | go install 安装位置 | $GOPATH/bin |
+| GOPROXY | 模块代理 | proxy.golang.org |
+| GOFLAGS | 默认 go 命令标志 | - |
+| GOPRIVATE | 私有模块（不走代理） | - |
+
+#### 2.2 其他安装方式
+
 ```bash
-# Ubuntu/Debian
-sudo apt update && sudo apt install -y golang-go
+# 包管理器安装（方便但版本可能较旧）
+sudo apt install -y golang-go      # Ubuntu/Debian
+sudo dnf install -y golang          # Rocky/RHEL 9+
+brew install go                     # macOS
 
-# Rocky/CentOS/RHEL
-sudo dnf install -y golang
-
-# macOS
-brew install go
+# 源码编译（适用于特殊架构）
+git clone https://go.googlesource.com/go goroot
+cd goroot/src && ./all.bash
 ```
 
-#### 2.2 Go 工作区结构
+### 3. Go Modules 依赖管理
 
-```
-~/go/
-├── bin/          # 编译后的可执行文件（go install 产物）
-├── pkg/          # 编译缓存
-└── src/          # 源代码（Go Modules 模式下不必须）
-```
+#### 3.1 go.mod 文件详解
 
-**Go Modules（现代项目管理）**：
 ```bash
-# 创建新项目
+# 初始化模块
 mkdir ~/projects/sre-tools && cd ~/projects/sre-tools
 go mod init github.com/yourname/sre-tools
-
-# 生成 go.mod 文件
-cat go.mod
-# module github.com/yourname/sre-tools
-# 
-# go 1.22
 ```
-
-#### 2.3 开发工具配置
-
-**VS Code + Go 扩展**：
-```bash
-# 安装 Go 扩展后，安装语言工具
-go install golang.org/x/tools/gopls@latest       # 语言服务器
-go install honnef.co/go/tools/cmd/staticcheck@latest  # 静态分析
-go install github.com/go-delve/delve/cmd/dlv@latest    # 调试器
-```
-
-**golangci-lint（推荐的 linter 集合）**：
-```bash
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-# 在项目根目录运行
-golangci-lint run
-
-# 常见 linter 规则：
-# - errcheck: 检查未处理的错误返回值
-# - gofmt: 代码格式化
-# - govet: 常见 bug 检测
-# - staticcheck: 高级静态分析
-```
-
-#### 2.4 GOPROXY 配置（国内加速）
-
-```bash
-# 使用七牛云或阿里云代理
-go env -w GOPROXY=https://goproxy.cn,direct
-# 或使用阿里云
-go env -w GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
-
-# 确认配置
-go env GOPROXY
-```
-
-### 3. 第一个 Go 程序
 
 ```go
-// main.go - SRE 系统信息工具
+// go.mod 文件结构
+module github.com/yourname/sre-tools  // 模块路径（import 前缀）
+
+go 1.22                               // 最低 Go 版本要求
+
+require (
+    github.com/prometheus/client_golang v1.18.0  // 直接依赖
+    github.com/spf13/cobra v1.8.0
+)
+
+require (
+    github.com/beorn7/perks v1.0.1 // indirect — 间接依赖
+)
+
+replace github.com/buggy/lib => ../local-lib  // 模块替换
+exclude github.com/insecure/lib v0.0.1        // 排除版本
+```
+
+**常用 go mod 命令：**
+
+```bash
+go mod download              # 下载依赖到本地缓存
+go mod tidy                  # 同步 go.mod/go.sum，添加缺失、移除无用
+go mod graph | head -20      # 查看依赖关系图
+go mod why <pkg>             # 查看为什么某个模块被依赖
+go mod verify                # 验证依赖完整性
+go mod edit -require pkg@v1  # 安全编辑 go.mod
+```
+
+#### 3.2 go.sum 校验机制
+
+```bash
+# go.sum 是依赖的校验和清单，保证依赖不被篡改
+cat go.sum
+# github.com/spf13/cobra v1.8.0 h1:HE...  (二进制哈希)
+# github.com/spf13/cobra v1.8.0/go.mod h1:...  (go.mod 哈希)
+# 每个依赖有两条记录：h1(二进制) + /go.mod(模块描述)
+# go.sum 必须提交到版本控制！
+```
+
+### 4. 开发工具链
+
+```bash
+# gopls — Go 语言服务器（代码补全、跳转、重构）
+go install golang.org/x/tools/gopls@latest
+
+# staticcheck — 高级静态分析
+go install honnef.co/go/tools/cmd/staticcheck@latest
+
+# delve — Go 调试器
+go install github.com/go-delve/delve/cmd/dlv@latest
+
+# golangci-lint — linter 聚合器
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+```
+
+### 5. 交叉编译
+
+Go 编译器原生支持交叉编译，内部包含所有目标平台的后端代码生成器：
+
+```bash
+# 编译 Linux ARM64（AWS Graviton、树莓派）
+GOOS=linux GOARCH=arm64 go build -o sre-tool main.go
+
+# 编译 macOS
+GOOS=darwin GOARCH=arm64 go build -o sre-tool main.go
+
+# 编译 Windows
+GOOS=windows GOARCH=amd64 go build -o sre-tool.exe main.go
+
+# 减小二进制大小（去除调试符号）
+go build -ldflags="-s -w" -o sre-tool main.go
+
+# 嵌入版本信息
+go build -ldflags="-s -w \
+  -X main.Version=$(git describe --tags) \
+  -X main.GitCommit=$(git rev-parse --short HEAD)" \
+  -o sre-tool main.go
+
+# 禁用 CGO 获得纯静态二进制
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o sre-tool main.go
+```
+
+### 6. 第一个 SRE 实战程序
+
+```go
 package main
 
 import (
-    "fmt"
-    "os"
-    "runtime"
+	"encoding/json"
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
+	"time"
 )
 
+type SystemInfo struct {
+	Timestamp    string `json:"timestamp"`
+	Hostname     string `json:"hostname"`
+	OS           string `json:"os"`
+	Architecture string `json:"architecture"`
+	NumCPU       int    `json:"num_cpu"`
+	NumGoroutine int    `json:"num_goroutine"`
+	MemoryAlloc  string `json:"memory_alloc"`
+	GoVersion    string `json:"go_version"`
+}
+
 func main() {
-    fmt.Println("=== SRE System Info ===")
-    fmt.Printf("OS:       %s\n", runtime.GOOS)
-    fmt.Printf("Arch:     %s\n", runtime.GOARCH)
-    fmt.Printf("CPU Cores: %d\n", runtime.NumCPU())
-    fmt.Printf("Go Version: %s\n", runtime.Version())
-    
-    hostname, err := os.Hostname()
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "Error getting hostname: %v\n", err)
-        os.Exit(1)
-    }
-    fmt.Printf("Hostname: %s\n", hostname)
+	info := collectSystemInfo()
+	data, _ := json.MarshalIndent(info, "", "  ")
+	fmt.Println(string(data))
+}
+
+func collectSystemInfo() SystemInfo {
+	hostname, _ := os.Hostname()
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	return SystemInfo{
+		Timestamp:    time.Now().Format(time.RFC3339),
+		Hostname:     hostname,
+		OS:           runtime.GOOS,
+		Architecture: runtime.GOARCH,
+		NumCPU:       runtime.NumCPU(),
+		NumGoroutine: runtime.NumGoroutine(),
+		MemoryAlloc:  fmt.Sprintf("%.2f MB", float64(mem.Alloc)/1024/1024),
+		GoVersion:    runtime.Version(),
+	}
+}
+
+func readUptime() string {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil { return "unknown" }
+	var seconds float64
+	fmt.Sscanf(strings.Fields(string(data))[0], "%f", &seconds)
+	return fmt.Sprintf("%d天%d小时", int(seconds)/86400, int(seconds)%86400/3600)
 }
 ```
 
-**编译与运行**：
 ```bash
-# 直接运行
-go run main.go
-
-# 编译为二进制
 go build -o sre-info main.go
 ./sre-info
-
-# 安装到 $GOPATH/bin
-go install
-sre-info  # 全局可用
+# {"timestamp":"2026-05-02T...","hostname":"sre-server-01","os":"linux",...}
 ```
 
-### 4. SRE 视角：Go vs Python vs Bash
+### 7. 推荐项目布局
 
-| 维度 | Bash | Python | Go |
-|------|------|--------|-----|
-| **启动速度** | 毫秒级 | 100-500ms | 毫秒级 |
-| **并发能力** | 弱（xargs -P） | GIL 限制 | 原生 goroutine |
-| **部署** | 无需编译 | 需要 pip/venv | 单一二进制 |
-| **类型安全** | 无 | 动态（可选 type hints） | 静态强类型 |
-| **适合场景** | 简单脚本、一行命令 | 数据分析、ML、胶水代码 | CLI 工具、微服务、Agent |
-| **学习曲线** | 低 | 中 | 中 |
+```
+sre-tools/
+├── cmd/                    # 可执行文件入口
+│   ├── sre-monitor/main.go
+│   └── sre-deploy/main.go
+├── internal/               # 私有包（外部无法 import）
+│   ├── monitor/
+│   │   ├── collector.go
+│   │   └── alert.go
+│   └── deploy/
+│       └── deployer.go
+├── pkg/                    # 公共库（可被外部 import）
+│   └── client/prometheus.go
+├── configs/
+│   └── monitor.yaml
+├── Makefile                # 构建、测试、lint 自动化
+├── go.mod
+└── go.sum
+```
 
-### 5. 常见问题
+**Makefile 示例：**
+```makefile
+.PHONY: build test lint clean
+build:
+	CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/sre-tool ./cmd/sre-tool
 
-| 问题 | 原因 | 解决方案 |
-|------|------|----------|
-| `command not found: go` | PATH 未配置 | `export PATH=$PATH:/usr/local/go/bin` |
-| 模块下载慢 | 网络问题 | 配置 `GOPROXY=https://goproxy.cn,direct` |
-| `go: no modules detected` | 未初始化 module | `go mod init` |
-| 编译后文件很大 | 包含调试信息 | `go build -ldflags="-s -w"` 去除符号表 |
-| 交叉编译失败 | CGO 未禁用 | `CGO_ENABLED=0 GOOS=linux go build` |
+test:
+	go test -race -count=1 ./...
 
+lint:
+	golangci-lint run ./...
+
+clean:
+	rm -rf bin/
+```
 
 ---
 
 ## 💻 实战练习
 
-### 练习 1：主机监控脚本
+### 练习 1：安装并验证 Go 环境
 
-```python
-#!/usr/bin/env python3
-import psutil, json, datetime
+安装 Go 1.22，配置 GOPROXY 为国内镜像，创建新模块并添加 prometheus client 依赖。
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
-        try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
+<details>
+<summary>参考答案</summary>
 
-data = check_system()
-print(json.dumps(data, indent=2))
+```bash
+curl -fsSL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | sudo tar -C /usr/local -xzf -
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc && source ~/.bashrc
+go env -w GOPROXY=https://goproxy.cn,direct
+mkdir ~/projects/sre-monitor && cd ~/projects/sre-monitor
+go mod init github.com/yourname/sre-monitor
+go get github.com/prometheus/client_golang/prometheus
+go mod tidy
+cat go.sum | wc -l  # 应有多行校验和记录
+```
+</details>
 
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+### 练习 2：交叉编译验证
+
+编写打印 GOOS 和 GOARCH 的程序，交叉编译三个版本并用 `file` 验证。
+
+<details>
+<summary>参考答案</summary>
+
+```go
+// main.go
+package main
+import ("fmt"; "runtime")
+func main() { fmt.Printf("OS: %s, Arch: %s\n", runtime.GOOS, runtime.GOARCH) }
 ```
 
-### 练习 2：日志分析工具
-
-```python
-import re
-from collections import Counter
-
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
-
-analyze_nginx_log("/var/log/nginx/access.log")
+```bash
+mkdir -p dist
+for p in "linux/amd64" "linux/arm64" "darwin/arm64"; do
+  GOOS=${p%/*} GOARCH=${p#*/} CGO_ENABLED=0 go build -o dist/tool-${p//\//-} main.go
+done
+file dist/*
 ```
+</details>
 
+### 练习 3：构建多入口工具集
+
+创建 cmd/sre-info 和 cmd/sre-health 两个命令，共享 internal/sysinfo 包。
+
+<details>
+<summary>参考答案</summary>
+
+```bash
+mkdir -p sre-tools/{cmd/{sre-info,sre-health},internal/sysinfo}
+cd sre-tools && go mod init github.com/yourname/sre-tools
+cat > internal/sysinfo/sysinfo.go << 'EOF'
+package sysinfo
+import "os"
+func Hostname() string { h, _ := os.Hostname(); return h }
+EOF
+cat > cmd/sre-info/main.go << 'EOF'
+package main
+import ("fmt"; "github.com/yourname/sre-tools/internal/sysinfo")
+func main() { fmt.Println("Hostname:", sysinfo.Hostname()) }
+EOF
+go build ./cmd/sre-info && go build ./cmd/sre-health
+```
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+- [Go 官方安装指南](https://go.dev/doc/install) — 最权威的安装文档
+- [Go Modules 参考](https://go.dev/ref/mod) — 依赖管理完整参考
+- [Go 调度器 GMP 模型](https://morsmachine.dk/go-scheduler) — Dmitry Vyukov
+- [Go 内存分配器](https://go.dev/doc/go1.5#runtime)
+- [golangci-lint 文档](https://golangci-lint.run/)
+- [etcd 源码](https://github.com/etcd-io/etcd) — 分布式系统 Go 实现
+- [Prometheus 源码](https://github.com/prometheus/prometheus) — TSDB 和指标处理
 
 ---
 
@@ -310,31 +390,25 @@ analyze_nginx_log("/var/log/nginx/access.log")
 
 ### 今日学习总结
 
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
+（记录安装过程、GOPROXY 配置效果、第一个程序的编译体验）
 
 ### 延伸思考
 
-- 思考 1：...
-- 思考 2：...
+- Go 的静态编译特性对 SRE 部署流程有什么影响？
+- 哪些现有的 Python/Bash 脚本可以重写为 Go？
+- 交叉编译如何简化多平台 SRE 工具的发布？
 
 ---
 
 ## ✅ 完成检查
 
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
+- [ ] Go 编译器安装成功，`go version` 输出版本信息
+- [ ] GOPROXY 配置完成，模块下载速度正常
+- [ ] 理解 go.mod 和 go.sum 的作用和区别
+- [ ] 成功创建 Go module 并添加第三方依赖
+- [ ] 完成交叉编译练习，验证不同架构二进制文件
+- [ ] 第一个 SRE 工具程序编译运行成功
 
 ---
 
-*由 SRE 学习计划自动生成 | 2026-05-02 14:56:38*  
-*Generated by Hermes Agent with review*
+*由 SRE 学习计划自动生成 | 2026-05-02*

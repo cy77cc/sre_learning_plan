@@ -1,211 +1,484 @@
 # Day 61: 接口与组合
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：接口与组合  
-> ⏰ 计划学习时间：2-3 小时
+> 📅 日期：2026-05-02
+> 📖 学习主题：接口与组合
+> ⏰ 计划学习时间：3-4 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 61 的学习后，你应该掌握：
-- 理解 接口与组合 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Go 接口的隐式实现机制和底层原理
+- 掌握接口作为函数参数和返回值的最佳实践
+- 理解结构体组合与嵌入的用法
+- 掌握接口在 SRE 工具中的抽象设计模式
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 接口与组合 — 核心概念
+### 1. 接口基础
 
-接口与组合 是 SRE 工程师必须掌握的重要技能。
+#### 1.1 隐式实现
 
-#### 1.1 基础知识
+Go 的接口不需要显式声明 `implements`，只要方法签名匹配就自动满足：
 
-- 理解接口与组合的基本原理和架构
-- 掌握常用命令和操作方式
-- 能够在实际工作场景中应用
+```go
+package main
 
-#### 1.2 SRE 实战场景
+import "fmt"
 
-在生产环境中，接口与组合的应用场景包括：
-- **日常运维**：定期检查和维护
-- **故障排查**：快速定位和解决问题
-- **自动化**：编写脚本实现自动化管理
+// 定义接口
+type Notifier interface {
+    Notify(message string) error
+}
 
-```bash
-# 基础操作示例
-# 根据接口与组合主题执行相关命令
-# 参考官方文档获取详细信息
+// 定义具体类型
+type SlackNotifier struct {
+    WebhookURL string
+    Channel    string
+}
+
+// 实现 Notifier 接口（无需显式声明）
+func (s *SlackNotifier) Notify(message string) error {
+    payload := fmt.Sprintf(`{"channel":"%s","text":"%s"}`, s.Channel, message)
+    _, err := http.Post(s.WebhookURL, "application/json", strings.NewReader(payload))
+    return err
+}
+
+type EmailNotifier struct {
+    SMTPHost string
+    To       string
+}
+
+func (e *EmailNotifier) Notify(message string) error {
+    // SMTP 发送逻辑
+    return nil
+}
+
+// 使用接口
+func alertAll(notifiers []Notifier, msg string) {
+    for _, n := range notifiers {
+        if err := n.Notify(msg); err != nil {
+            fmt.Printf("alert failed: %v\n", err)
+        }
+    }
+}
+
+func main() {
+    notifiers := []Notifier{
+        &SlackNotifier{WebhookURL: "https://hooks.slack.com/...", Channel: "#alerts"},
+        &EmailNotifier{SMTPHost: "smtp.company.com", To: "oncall@company.com"},
+    }
+    alertAll(notifiers, "CRITICAL: db-01 CPU at 95%")
+}
 ```
 
----
+#### 1.2 接口的底层结构
 
-### 2. 实际操作
+接口在运行时由两个字组成：
 
-#### 2.1 基础练习
+```go
+// 接口的运行时表示
+type iface struct {
+    tab  *itab      // 类型描述：具体类型 + 方法表
+    data unsafe.Pointer  // 指向实际数据的指针
+}
 
-```bash
-# 练习 1：基础命令
-# 查阅官方文档，完成基本操作
+// itab 包含类型信息和方法分发指针
+type itab struct {
+    inter *interfacetype  // 接口类型
+    _type *_type          // 具体类型
+    hash  uint32
+    bad   bool
+    inhash bool
+    unused [2]byte
+    fun   [1]uintptr  // 方法指针数组
+}
 ```
 
-#### 2.2 进阶练习
+```go
+// 接口变量存储的是 (类型, 值) 对
+var n Notifier = &SlackNotifier{WebhookURL: "...", Channel: "#alerts"}
+// n 的内部表示: (type=*SlackNotifier, value=&SlackNotifier{...})
 
-```bash
-# 练习 2：结合实际场景
-# 尝试在测试环境中模拟生产问题
+// 检查接口是否为 nil
+var x Notifier
+fmt.Println(x == nil)  // true — 类型和值都是 nil
+
+// 常见陷阱
+var s *SlackNotifier  // nil 指针
+n = s                 // 接口不是 nil！类型是 *SlackNotifier，值是 nil
+fmt.Println(n == nil) // false — 类型非 nil
 ```
 
----
+### 2. 常用标准库接口
 
-### 3. 常见问题
+#### 2.1 io.Reader 和 io.Writer
 
-| 问题 | 排查思路 |
-|------|---------|
-| 服务无法启动 | 检查日志、端口占用、配置文件 |
-| 性能下降 | 监控资源使用、检查瓶颈 |
-| 连接失败 | 检查网络、防火墙、服务状态 |
+```go
+// io.Reader — 所有可读事物的抽象
+type Reader interface {
+    Read(p []byte) (n int, err error)
+}
 
----
+// io.Writer — 所有可写事物的抽象
+type Writer interface {
+    Write(p []byte) (n int, err error)
+}
 
-### 4. 扩展阅读
+// SRE 实战：统一处理不同来源的日志数据
+func processLogs(r io.Reader) error {
+    scanner := bufio.NewScanner(r)
+    for scanner.Scan() {
+        line := scanner.Text()
+        if strings.Contains(line, "ERROR") {
+            fmt.Println("[ALERT]", line)
+        }
+    }
+    return scanner.Err()
+}
 
-- 查阅官方文档获取最准确的信息
-- 参考相关技术博客和教程
-- 在测试环境中反复练习
+// 同一个函数可以处理多种来源
+file, _ := os.Open("/var/log/app.log")
+processLogs(file)                // 从文件读取
 
+resp, _ := http.Get("http://api/logs")
+processLogs(resp.Body)           // 从 HTTP 响应读取
+
+processLogs(strings.NewReader("ERROR: disk full"))  // 从字符串读取
+```
+
+#### 2.2 fmt.Stringer
+
+```go
+type Stringer interface {
+    String() string
+}
+
+type ServerState int
+const (
+    StateRunning ServerState = iota
+    StateStopped
+    StateDegraded
+)
+
+func (s ServerState) String() string {
+    return [...]string{"RUNNING", "STOPPED", "DEGRADED"}[s]
+}
+
+// fmt 包自动调用 String() 方法
+state := StateRunning
+fmt.Println(state)  // RUNNING（而非 0）
+```
+
+#### 2.3 error 接口
+
+```go
+// error 是最简单的接口
+type error interface {
+    Error() string
+}
+
+// 自定义错误实现
+type DeployError struct {
+    Service string
+    Reason  string
+    Code    int
+}
+
+func (e *DeployError) Error() string {
+    return fmt.Sprintf("deploy failed for %s (code %d): %s",
+        e.Service, e.Code, e.Reason)
+}
+
+func deploy(service string) error {
+    // ...
+    return &DeployError{Service: service, Reason: "health check failed", Code: 503}
+}
+```
+
+### 3. 空接口与类型断言
+
+#### 3.1 interface{}（any）
+
+```go
+// Go 1.18+ 可以用 any 代替 interface{}
+func printAny(v any) {
+    fmt.Println(v)
+}
+
+printAny(42)          // int
+printAny("hello")     // string
+printAny([]int{1,2})  // []int
+```
+
+#### 3.2 类型断言与类型开关
+
+```go
+// 类型断言
+func handleValue(v interface{}) {
+    s, ok := v.(string)
+    if ok {
+        fmt.Println("string:", s)
+        return
+    }
+    n, ok := v.(int)
+    if ok {
+        fmt.Println("int:", n)
+        return
+    }
+    fmt.Println("unknown type")
+}
+
+// 类型开关（更优雅）
+func handleValueSwitch(v interface{}) {
+    switch t := v.(type) {
+    case string:
+        fmt.Println("string:", t)
+    case int:
+        fmt.Println("int:", t)
+    case float64:
+        fmt.Println("float64:", t)
+    case []string:
+        fmt.Println("string slice:", t)
+    default:
+        fmt.Printf("unknown: %T\n", v)
+    }
+}
+```
+
+### 4. 组合优于继承
+
+Go 没有继承，通过结构体嵌入实现组合：
+
+```go
+// 基础组件
+type Logger struct {
+    Prefix string
+    Level  string
+}
+
+func (l *Logger) Info(msg string) {
+    fmt.Printf("[%s] INFO: %s\n", l.Prefix, msg)
+}
+
+func (l *Logger) Error(msg string) {
+    fmt.Printf("[%s] ERROR: %s\n", l.Prefix, msg)
+}
+
+// 组合：嵌入 Logger
+type Server struct {
+    Logger           // 嵌入 — Server 自动拥有 Info/Error 方法
+    Name    string
+    Port    int
+}
+
+func main() {
+    s := Server{
+        Logger: Logger{Prefix: "web-01", Level: "info"},
+        Name:   "web-01",
+        Port:   8080,
+    }
+    s.Info("server started")  // [web-01] INFO: server started
+    s.Error("connection refused")
+}
+
+// 接口组合
+type ReadWriter interface {
+    io.Reader
+    io.Writer
+}
+
+// ReadWriter 自动拥有 Read 和 Write 方法
+// 等价于：
+// type ReadWriter interface {
+//     Read(p []byte) (n int, err error)
+//     Write(p []byte) (n int, err error)
+// }
+```
+
+### 5. SRE 实战：可插拔的健康检查器
+
+```go
+package main
+
+import (
+    "fmt"
+    "net"
+    "net/http"
+    "time"
+)
+
+// Checker 接口 — 所有健康检查器必须实现
+type Checker interface {
+    Name() string
+    Check() (bool, time.Duration, error)
+}
+
+// TCP 检查器
+type TCPChecker struct {
+    Addr    string
+    Timeout time.Duration
+}
+
+func (t *TCPChecker) Name() string { return "tcp:" + t.Addr }
+
+func (t *TCPChecker) Check() (bool, time.Duration, error) {
+    start := time.Now()
+    conn, err := net.DialTimeout("tcp", t.Addr, t.Timeout)
+    if err != nil {
+        return false, time.Since(start), err
+    }
+    conn.Close()
+    return true, time.Since(start), nil
+}
+
+// HTTP 检查器
+type HTTPChecker struct {
+    URL        string
+    Timeout    time.Duration
+    ExpectCode int
+}
+
+func (h *HTTPChecker) Name() string { return "http:" + h.URL }
+
+func (h *HTTPChecker) Check() (bool, time.Duration, error) {
+    start := time.Now()
+    client := &http.Client{Timeout: h.Timeout}
+    resp, err := client.Get(h.URL)
+    if err != nil {
+        return false, time.Since(start), err
+    }
+    defer resp.Body.Close()
+    ok := resp.StatusCode == h.ExpectCode
+    return ok, time.Since(start), nil
+}
+
+// 运行所有检查器
+func runChecks(checkers []Checker) {
+    fmt.Printf("%-30s %-8s %-10s %s\n", "Checker", "Result", "Latency", "Error")
+    fmt.Println(strings.Repeat("-", 70))
+    for _, c := range checkers {
+        ok, dur, err := c.Check()
+        result := "✅ OK"
+        errMsg := ""
+        if !ok {
+            result = "❌ FAIL"
+        }
+        if err != nil {
+            errMsg = err.Error()
+        }
+        fmt.Printf("%-30s %-8s %-10v %s\n", c.Name(), result, dur.Round(time.Millisecond), errMsg)
+    }
+}
+
+func main() {
+    checkers := []Checker{
+        &TCPChecker{Addr: "10.0.1.10:3306", Timeout: 3 * time.Second},
+        &HTTPChecker{URL: "http://10.0.1.10:8080/health", Timeout: 5 * time.Second, ExpectCode: 200},
+        &TCPChecker{Addr: "10.0.1.10:6379", Timeout: 3 * time.Second},
+    }
+    runChecks(checkers)
+}
+```
 
 ---
 
 ## 💻 实战练习
 
-### 练习 1：主机监控脚本
+### 练习 1：实现 io.Writer
 
-```python
-#!/usr/bin/env python3
-import psutil, json, datetime
+创建一个 CountingWriter，包装另一个 io.Writer 并统计写入的字节数。
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
-        try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
+<details>
+<summary>参考答案</summary>
 
-data = check_system()
-print(json.dumps(data, indent=2))
-
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+```go
+type CountingWriter struct {
+    Writer io.Writer
+    Count  int64
+}
+func (cw *CountingWriter) Write(p []byte) (int, error) {
+    n, err := cw.Writer.Write(p)
+    cw.Count += int64(n)
+    return n, err
+}
 ```
+</details>
 
-### 练习 2：日志分析工具
+### 练习 2：接口组合设计
 
-```python
-import re
-from collections import Counter
+设计 MetricCollector 接口，包含 Collect() 和 Name() 方法，实现 CPU 和内存两个采集器。
 
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
+<details>
+<summary>参考答案</summary>
 
-analyze_nginx_log("/var/log/nginx/access.log")
+```go
+type MetricCollector interface {
+    Name() string
+    Collect() (float64, error)
+}
+type CPUCollector struct{}
+func (c *CPUCollector) Name() string { return "cpu" }
+func (c *CPUCollector) Collect() (float64, error) { /* ... */ return 0, nil }
+type MemCollector struct{}
+func (m *MemCollector) Name() string { return "memory" }
+func (m *MemCollector) Collect() (float64, error) { /* ... */ return 0, nil }
 ```
+</details>
 
+### 练习 3：类型开关处理
+
+编写函数，接受 interface{} 参数，用 type switch 区分 int、string、[]byte 并做不同处理。
+
+<details>
+<summary>参考答案</summary>
+
+```go
+func process(v interface{}) string {
+    switch t := v.(type) {
+    case int:
+        return fmt.Sprintf("number: %d", t)
+    case string:
+        return fmt.Sprintf("text: %s", t)
+    case []byte:
+        return fmt.Sprintf("binary: %d bytes", len(t))
+    default:
+        return fmt.Sprintf("unknown: %T", v)
+    }
+}
+```
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
+- [Effective Go — Interfaces](https://go.dev/doc/effective_go#interfaces) — 官方接口指南
+- [Go Data Structures: Interfaces](https://research.swtch.com/interfaces) — Russ Cox 的深度解析
+- [Accept interfaces, return structs](https://go.dev/wiki/CodeReviewComments) — Go 代码审查建议
 
 ---
 
 ## 📝 笔记
 
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
 ### 延伸思考
 
-- 思考 1：...
-- 思考 2：...
+- 为什么 Go 选择隐式接口实现而非显式？
+- 空接口和类型开关的使用场景是什么？是否有更好的替代方案？
+- "Accept interfaces, return structs" 原则在实际项目中如何应用？
 
 ---
 
 ## ✅ 完成检查
 
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
+- [ ] 理解接口隐式实现机制和底层结构
+- [ ] 掌握 io.Reader/io.Writer 的抽象用法
+- [ ] 能使用类型断言和类型开关
+- [ ] 理解结构体嵌入与组合的设计模式
+- [ ] 能设计可插拔的 SRE 工具接口
 
 ---
 
-*由 SRE 学习计划自动生成 | 2026-05-02 13:37:22*  
-*Generated by Hermes Agent with review*
+*由 SRE 学习计划自动生成 | 2026-05-02*

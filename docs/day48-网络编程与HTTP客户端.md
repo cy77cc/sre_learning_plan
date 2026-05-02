@@ -1,177 +1,380 @@
-# Day 48: 网络编程与 HTTP 客户端
+# Day 48: Python 网络编程与 HTTP 客户端
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：网络编程与 HTTP 客户端  
+> 📅 日期：2026-05-02
+> 📖 学习主题：Python 网络编程与 HTTP 客户端
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 48 的学习后，你应该掌握：
-- 理解 网络编程与 HTTP 客户端 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 掌握 requests 库的高级用法
+- 理解 socket 编程基础
+- 能编写 HTTP 客户端与 REST API 交互
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 网络编程与 HTTP 客户端
+### 1. requests 高级用法
 
-#### 1.1 基础概念
+```python
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-网络编程与 HTTP 客户端 是网络通信的重要组成部分。
+# 会话（保持连接）
+session = requests.Session()
+session.headers.update({"User-Agent": "SRE-Tool/1.0"})
 
-#### 1.2 常用命令
+# 重试策略
+retry = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503])
+adapter = HTTPAdapter(max_retries=retry)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
 
-```bash
-# 网络诊断工具
-ping -c 4 example.com           # 测试连通性
-traceroute example.com          # 追踪路径
-mtr example.com                 # 综合诊断
+# 发送请求
+resp = session.get("https://api.example.com/data", params={"page": 1})
+resp.raise_for_status()  # 抛出 HTTP 错误
+data = resp.json()
+
+# 上传文件
+with open("backup.tar.gz", "rb") as f:
+    session.put("https://storage.example.com/file", data=f)
+
+# 超时设置
+resp = requests.get(url, timeout=(3.05, 30))  # (connect, read)
 ```
 
-#### 1.3 SRE 实战
+### 2. Socket 编程基础
 
-- 网络故障排查流程：ping → traceroute → telnet/nc → curl
-- 编写网络诊断脚本
+```python
+import socket
 
-#### 1.4 练习
+# TCP 客户端
+def tcp_client(host, port, message):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((host, port))
+        s.sendall(message.encode())
+        data = s.recv(1024)
+        return data.decode()
 
-- 使用相关命令进行网络诊断
-- 分析网络延迟和丢包
+# TCP 服务端
+def tcp_server(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, port))
+        s.listen()
+        conn, addr = s.accept()
+        with conn:
+            data = conn.recv(1024)
+            conn.sendall(b"OK")
 
+# UDP
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+    s.sendto(b"hello", ("localhost", 9999))
+    data, addr = s.recvfrom(1024)
+```
 
----
-
-## 💻 实战练习
-
-### 练习 1：主机监控脚本
+### 3. 实战：API 健康检查
 
 ```python
 #!/usr/bin/env python3
-import psutil, json, datetime
+"""API health checker with retry and timeout."""
 
-def check_system():
-    report = {{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "cpu_percent": psutil.cpu_percent(interval=1),
-        "memory": {{
-            "total_gb": round(psutil.virtual_memory().total / 1e9, 2),
-            "used_percent": psutil.virtual_memory().percent
-        }},
-        "disk": {{}},
-    }}
-    for part in psutil.disk_partitions():
+import requests
+import sys
+import time
+
+
+def check_api(url, retries=3, timeout=5):
+    session = requests.Session()
+    for i in range(retries):
         try:
-            usage = psutil.disk_usage(part.mountpoint)
-            report["disk"][part.mountpoint] = {{
-                "total_gb": round(usage.total / 1e9, 2),
-                "used_percent": usage.percent
-            }}
-        except PermissionError:
-            pass
-    return report
+            start = time.time()
+            resp = session.get(url, timeout=timeout)
+            elapsed = time.time() - start
+            print(f"OK {url} {resp.status_code} {elapsed:.3f}s")
+            return True
+        except requests.RequestException as e:
+            print(f"FAIL {url} attempt {i+1}: {e}")
+            if i < retries - 1:
+                time.sleep(2 ** i)
+    return False
 
-data = check_system()
-print(json.dumps(data, indent=2))
 
-# 告警
-if data["cpu_percent"] > 80:
-    print("ALERT: High CPU usage!")
-if data["memory"]["used_percent"] > 90:
-    print("ALERT: High memory usage!")
+urls = ["http://localhost:8080/health", "http://localhost:9090/metrics"]
+all_ok = all(check_api(u) for u in urls)
+sys.exit(0 if all_ok else 1)
 ```
 
-### 练习 2：日志分析工具
+---
+
+## 4. HTTP 方法详解
 
 ```python
-import re
-from collections import Counter
+# GET - 获取资源
+resp = requests.get("https://api.example.com/users/1")
 
-def analyze_nginx_log(log_file):
-    pattern = r'(\S+) \S+ \S+ \[(.+?)\] "(\S+)" (\d+)'
-    ips = Counter()
-    status_codes = Counter()
-    with open(log_file) as f:
-        for line in f:
-            m = re.match(pattern, line)
-            if m:
-                ips[m.group(1)] += 1
-                status_codes[m.group(4)] += 1
-    print("Top 10 IPs:", ips.most_common(10))
-    print("Status codes:", dict(status_codes))
+# POST - 创建资源
+resp = requests.post(
+    "https://api.example.com/users",
+    json={"name": "Alice", "email": "alice@example.com"},
+)
 
-analyze_nginx_log("/var/log/nginx/access.log")
+# PUT - 替换资源
+resp = requests.put(
+    "https://api.example.com/users/1",
+    json={"name": "Alice Updated"},
+)
+
+# PATCH - 部分更新
+resp = requests.patch(
+    "https://api.example.com/users/1",
+    json={"email": "new@example.com"},
+)
+
+# DELETE - 删除资源
+resp = requests.delete("https://api.example.com/users/1")
 ```
 
+## 5. HTTP 状态码处理
+
+```python
+def handle_response(resp):
+    if resp.status_code == 200:
+        return resp.json()
+    elif resp.status_code == 201:
+        print("Resource created")
+        return resp.json()
+    elif resp.status_code == 204:
+        print("No content")
+        return None
+    elif resp.status_code == 400:
+        print(f"Bad request: {resp.text}")
+        return None
+    elif resp.status_code == 401:
+        print("Unauthorized - check credentials")
+        return None
+    elif resp.status_code == 403:
+        print("Forbidden - insufficient permissions")
+        return None
+    elif resp.status_code == 404:
+        print("Not found")
+        return None
+    elif resp.status_code == 429:
+        retry_after = resp.headers.get("Retry-After", 5)
+        print(f"Rate limited, retry after {retry_after}s")
+        return None
+    elif resp.status_code >= 500:
+        print(f"Server error: {resp.status_code}")
+        return None
+    else:
+        print(f"Unexpected status: {resp.status_code}")
+        return None
+```
+
+## 6. 分页处理
+
+```python
+def fetch_all_pages(base_url, session=None):
+    """Fetch all pages from a paginated API."""
+    session = session or requests.Session()
+    all_data = []
+    page = 1
+
+    while True:
+        resp = session.get(f"{base_url}?page={page}&per_page=100")
+        resp.raise_for_status()
+        data = resp.json()
+
+        if not data:
+            break
+
+        all_data.extend(data)
+
+        # Check for next page
+        if "next" not in resp.links:
+            break
+        page += 1
+
+    return all_data
+```
+
+## 7. 实战：端口扫描工具
+
+```python
+#!/usr/bin/env python3
+"""TCP port scanner using sockets."""
+
+import socket
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+def scan_port(host, port, timeout=1):
+    """Scan a single port."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            result = s.connect_ex((host, port))
+            return port, result == 0
+    except socket.error:
+        return port, False
+
+
+def scan(host, ports, max_workers=50):
+    """Scan multiple ports concurrently."""
+    open_ports = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(scan_port, host, p): p for p in ports
+        }
+        for future in as_completed(futures):
+            port, is_open = future.result()
+            if is_open:
+                open_ports.append(port)
+    return sorted(open_ports)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="TCP Port Scanner")
+    parser.add_argument("host", help="Target host")
+    parser.add_argument("-p", "--ports", default="1-1024", help="Port range")
+    parser.add_argument("-t", "--threads", type=int, default=50)
+    args = parser.parse_args()
+
+    # Parse port range
+    if "-" in args.ports:
+        start, end = args.ports.split("-")
+        ports = range(int(start), int(end) + 1)
+    else:
+        ports = [int(p) for p in args.ports.split(",")]
+
+    print(f"Scanning {args.host}...")
+    open_ports = scan(args.host, ports, args.threads)
+
+    if open_ports:
+        print(f"Open ports on {args.host}:")
+        for port in open_ports:
+            print(f"  {port}/tcp")
+    else:
+        print("No open ports found")
+
+
+if __name__ == "__main__":
+    main()
+```
 
 ---
 
-## 📚 最新优质资源
+## 🧪 练习题
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
+### 练习 1：并发 URL 检查
 
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
+用 ThreadPoolExecutor 并发检查 100 个 URL 的健康状态。
 
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
+<details>
+<summary>答案</summary>
 
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
+```python
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
 
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
+def check(url):
+    try:
+        r = requests.get(url, timeout=5)
+        return url, r.status_code, True
+    except Exception as e:
+        return url, None, False
 
+urls = [f"http://example.com/page/{i}" for i in range(100)]
+with ThreadPoolExecutor(max_workers=20) as ex:
+    for f in as_completed(ex.submit(check, u) for u in urls):
+        url, status, ok = f.result()
+        print(f"{'OK' if ok else 'FAIL'} {url}")
+```
+</details>
 
----
+### 练习 2：Socket 实现简单的 HTTP 服务器
 
-## 📝 笔记
+<details>
+<summary>答案</summary>
 
-### 今日学习总结
+```python
+import socket
 
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
+def simple_server(host="0.0.0.0", port=8080):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((host, port))
+        s.listen()
+        print(f"Listening on {host}:{port}")
+        while True:
+            conn, addr = s.accept()
+            with conn:
+                data = conn.recv(1024)
+                response = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html\r\n"
+                    "\r\n"
+                    "<h1>Hello World</h1>"
+                )
+                conn.sendall(response.encode())
+```
+</details>
 
 ---
 
-*由 SRE 学习计划自动生成 | 2026-05-02 13:36:55*  
-*Generated by Hermes Agent with review*
+## 📖 补充知识：HTTPS 与 TLS
+
+### 8. TLS 握手过程
+
+```
+客户端                              服务器
+  │                                   │
+  │  ClientHello                      │
+  │  (支持的TLS版本、加密套件)         │
+  │ ────────────────────────────────→│
+  │                                   │
+  │  ServerHello                      │
+  │  (选择的TLS版本、加密套件)         │
+  │  Certificate (服务器证书)          │
+  │ ←─────────────────────────────── │
+  │                                   │
+  │  ClientKeyExchange                │
+  │  ChangeCipherSpec                 │
+  │ ────────────────────────────────→│
+  │                                   │
+  │  ←── 加密通信开始 ──→              │
+```
+
+### 9. 证书验证
+
+```python
+# requests 默认验证证书
+requests.get("https://example.com")  # 验证证书
+
+# 跳过验证（不推荐）
+requests.get("https://example.com", verify=False)
+
+# 使用自定义 CA
+requests.get("https://example.com", verify="/path/to/ca.pem")
+
+# 查看证书信息
+import ssl
+import socket
+
+context = ssl.create_default_context()
+with socket.create_connection(("example.com", 443)) as sock:
+    with context.wrap_socket(sock, server_hostname="example.com") as ssock:
+        cert = ssock.getpeercert()
+        print(cert)
+```
+
+---
+
+## 📚 扩展阅读
+
+- [requests 文档](https://requests.readthedocs.io/)
+- [Python socket 文档](https://docs.python.org/3/library/socket.html)
+- [urllib3 高级用法](https://urllib3.readthedocs.io/)

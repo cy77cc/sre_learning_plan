@@ -1,229 +1,107 @@
-# Day 84: docker-compose 多容器编排
+# Day 84: Docker Compose 多容器编排
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：docker-compose 多容器编排  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Docker Compose 多容器编排
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 84 的学习后，你应该掌握：
-- 理解 docker-compose 多容器编排 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 掌握 docker-compose.yml 语法
+- 能用 Compose 管理多容器应用
+- 理解 Compose 的启动顺序和依赖管理
 
 ---
 
-## 📖 详细知识点
+## 📖 Compose 基础
 
-### 1. docker-compose 完整实战
-
-#### 1.1 搭建 LEMP 环境
+### 1. 核心概念
 
 ```yaml
-# docker-compose.yml
 version: '3.8'
-
-services:
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./html:/usr/share/nginx/html:ro
-      - nginx-logs:/var/log/nginx
-    depends_on:
-      php:
-        condition: service_healthy
-    restart: unless-stopped
-
-  php:
-    build:
-      context: .
-      dockerfile: Dockerfile.php-fpm
-    volumes:
-      - ./html:/var/www/html:ro
-    depends_on:
-      mysql:
-        condition: service_healthy
-    restart: unless-stopped
-
-  mysql:
-    image: mysql:8
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: webapp
-      MYSQL_USER: webapp
-      MYSQL_PASSWORD: apppass
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      retries: 5
-    restart: unless-stopped
-
-  adminer:
-    image: adminer
-    ports:
-      - "8080:8080"
-    depends_on:
-      - mysql
-    restart: unless-stopped
-
-volumes:
-  mysql-data:
-  nginx-logs:
-```
-
-```bash
-# 启动
-docker compose up -d
-
-# 查看日志
-docker compose logs -f --tail=50
-
-# 停止（保留数据）
-docker compose stop
-
-# 完全清理
-docker compose down -v
-```
-
-### 2. 多环境配置
-
-```bash
-# docker-compose.yml（基础配置）
-# docker-compose.override.yml（开发覆盖）
-# docker-compose.prod.yml（生产覆盖）
-
-# 开发环境
-docker compose up -d
-
-# 生产环境
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：多阶段构建优化
-
-```dockerfile
-# Build stage
-FROM golang:1.21 AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
-
-# Runtime stage
-FROM alpine:3.18
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
-```
-
-### 练习 2：docker-compose 编排
-
-```yaml
-version: "3.8"
-services:
+services:       # 定义容器
   web:
     build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
-    environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
+    ports:
+      - "80:80"
   db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
+    image: mysql:8.0
     environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-volumes:
-  pgdata:
+      MYSQL_ROOT_PASSWORD: secret
+volumes:        # 定义数据卷
+  db_data:
+networks:       # 定义网络
+  appnet:
 ```
 
+### 2. 常用指令
+
+```yaml
+services:
+  app:
+    build: .              # 从 Dockerfile 构建
+    image: myapp:v1       # 或使用现成镜像
+    ports:
+      - "8080:80"         # 端口映射
+    environment:          # 环境变量
+      - DB_HOST=db
+      - DB_PORT=3306
+    env_file:             # 从文件加载
+      - .env
+    volumes:              # 数据挂载
+      - ./data:/app/data
+      - logs:/app/logs
+    depends_on:           # 依赖
+      db:
+        condition: service_healthy
+    networks:
+      - appnet
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+```
+
+### 3. 常用命令
+
+```bash
+docker compose up -d           # 启动
+docker compose down            # 停止并删除
+docker compose ps              # 查看状态
+docker compose logs -f app     # 查看日志
+docker compose exec app bash   # 进入容器
+docker compose build           # 重新构建
+docker compose pull            # 拉取镜像
+docker compose restart app     # 重启单个服务
+```
+
+### 4. Profile
+
+```yaml
+services:
+  app:
+    build: .
+  debug:
+    image: myapp:debug
+    profiles: ["debug"]
+```
+
+```bash
+docker compose up -d              # 不启动 debug
+docker compose --profile debug up # 启动 debug
+```
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:19*  
-*Generated by Hermes Agent with review*
+- [Docker Compose 文档](https://docs.docker.com/compose/)
+- [Compose 文件参考](https://docs.docker.com/compose/compose-file/)

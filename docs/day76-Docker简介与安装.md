@@ -1,247 +1,270 @@
 # Day 76: Docker 简介与安装
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Docker 简介与安装  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Docker 简介与安装
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 76 的学习后，你应该掌握：
-- 理解 Docker 简介与安装 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Docker 的核心概念和架构
+- 掌握 Docker 与虚拟机的区别
+- 能在 Linux 上安装 Docker
+- 理解容器、镜像、仓库的关系
+- 掌握 Docker 的核心组件（daemon、CLI、containerd）
 
 ---
 
 ## 📖 详细知识点
 
-### 1. Docker 核心概念
+### 1. 什么是 Docker
 
-#### 1.1 容器 vs 虚拟机
-
-```
-┌──────────────────────────┐  ┌──────────────────────────┐
-│     虚拟机 (VM)           │  │      容器 (Container)     │
-├──────────────────────────┤  ├──────────────────────────┤
-│   App  App  App          │  │   App  App  App          │
-│   Libs Libs Libs         │  │   Libs Libs Libs         │
-├──────────────────────────┤  ├──────────────────────────┤
-│     Guest OS (完整)       │  │   Docker Engine          │
-├──────────────────────────┤  ├──────────────────────────┤
-│       Hypervisor          │  │     Host OS (共享内核)    │
-├──────────────────────────┤  ├──────────────────────────┤
-│     Host OS              │  │     Host OS              │
-├──────────────────────────┤  ├──────────────────────────┤
-│     硬件                 │  │     硬件                 │
-└──────────────────────────┘  └──────────────────────────┘
-
-VM:       启动 1-3 分钟，占用 GB 级内存，强隔离
-Container: 启动毫秒级，占用 MB 级内存，进程级隔离
-```
-
-#### 1.2 Docker 架构
+Docker 是一个开源的容器化平台，让开发者可以打包应用及其依赖到一个可移植的容器中。
 
 ```
-┌──────────┐      REST API     ┌──────────────┐
-│  Docker  │  ──────────────→  │   Docker     │
-│   CLI    │                   │   Daemon     │
-│ (docker) │  ←──────────────  │  (dockerd)   │
-└──────────┘                   └──────┬───────┘
-                                     │
-                          ┌──────────┼──────────┐
-                          ▼          ▼          ▼
-                    ┌──────┐  ┌──────┐  ┌──────┐
-                    │Image │  │Cont. │  │ Vol. │
-                    └──────┘  └──────┘  └──────┘
+传统部署 vs 容器化部署：
+
+传统：
+  物理机/VM
+  ├── OS (Ubuntu)
+  ├── 运行环境 (Python 3.9, Node 16)
+  ├── 应用 A
+  └── 应用 B
+  问题：依赖冲突、环境不一致、资源浪费
+
+Docker：
+  物理机/VM
+  └── OS (共享内核)
+      ├── 容器 A (Python 3.9 + App A)
+      ├── 容器 B (Node 16 + App B)
+      └── 容器 C (Redis)
+  优势：隔离、轻量、可移植、快速启动
 ```
 
-### 2. 安装 Docker
+### 2. Docker vs 虚拟机
+
+| 特性 | Docker 容器 | 虚拟机 (VM) |
+|------|-------------|-------------|
+| 启动时间 | 秒级 | 分钟级 |
+| 体积 | MB 级 | GB 级 |
+| 性能 | 接近原生 | 有虚拟化开销 |
+| 隔离级别 | 进程级（共享内核） | 系统级（独立内核） |
+| 资源占用 | 低 | 高 |
+| 适用场景 | 微服务、CI/CD、开发环境 | 多 OS、强隔离需求 |
+
+```
+架构对比：
+
+虚拟机：
+  App A → Libs → Guest OS → Hypervisor → Host OS → Hardware
+  App B → Libs → Guest OS → Hypervisor → Host OS → Hardware
+
+Docker：
+  App A → Libs → Container Engine → Host OS → Hardware
+  App B → Libs → Container Engine → Host OS → Hardware
+
+关键差异：
+- VM 需要完整的 Guest OS（几百 MB ~ 几 GB）
+- 容器共享宿主机内核，只需包含应用和依赖（几 MB ~ 几百 MB）
+- VM 隔离更强（独立内核），容器更轻量
+```
+
+### 3. Docker 核心概念
+
+```
+Docker 三大核心：
+
+镜像 (Image)：
+  - 只读模板，包含应用和所有依赖
+  - 分层存储，每层可复用
+  - 类似虚拟机的"模板"
+
+容器 (Container)：
+  - 镜像的运行实例
+  - 可创建、启动、停止、删除
+  - 类似虚拟机的"运行实例"
+
+仓库 (Registry)：
+  - 存储和分发镜像的服务
+  - Docker Hub 是公共仓库
+  - 可自建私有仓库
+
+工作流程：
+  编写 Dockerfile → 构建镜像 (docker build) → 运行容器 (docker run)
+```
+
+### 4. Docker 架构
+
+```
+Docker 架构：
+
+  docker CLI (用户命令)
+      │
+      ▼
+  Docker Daemon (dockerd)
+      ├── containerd (容器运行时管理)
+      │     └── containerd-shim (容器进程)
+      │           └── runc (OCI 运行时)
+      │                 └── 容器进程
+      ├── Image Service (镜像管理)
+      ├── Network Service (网络管理)
+      └── Volume Service (存储管理)
+
+  核心组件：
+  - dockerd：主守护进程，处理 API 请求
+  - containerd：容器生命周期管理
+  - runc：低级别容器运行时（OCI 规范）
+  - docker CLI：用户命令行工具
+```
+
+### 5. 容器底层技术
+
+```
+Linux 内核提供的两大核心技术：
+
+1. Namespaces（命名空间）— 隔离
+   - PID Namespace：进程 ID 隔离
+   - Network Namespace：网络隔离
+   - Mount Namespace：文件系统隔离
+   - UTS Namespace：主机名隔离
+   - IPC Namespace：进程间通信隔离
+   - User Namespace：用户 ID 隔离
+
+2. Cgroups（控制组）— 资源限制
+   - CPU：限制 CPU 使用
+   - Memory：限制内存使用
+   - I/O：限制磁盘 I/O
+   - Network：限制网络带宽
+
+3. UnionFS（联合文件系统）— 分层存储
+   - Overlay2：Docker 默认存储驱动
+   - AUFS：早期使用的存储驱动
+   - Btrfs/ZFS：支持快照的存储驱动
+```
+
+---
+
+## 🏗️ 安装 Docker
+
+### Ubuntu/Debian
 
 ```bash
-# Ubuntu 官方方式
-sudo apt update
-sudo apt install -y ca-certificates curl gnupg
+# 卸载旧版本
+sudo apt-get remove docker docker-engine docker.io containerd runc
+
+# 安装依赖
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg lsb-release
+
+# 添加 Docker 官方 GPG 密钥
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-    sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
-    sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+# 添加仓库
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io
-
-# 免 sudo 使用
-sudo usermod -aG docker $USER
-# 退出重新登录生效
-
-# 设置开机启动
-sudo systemctl enable docker
-sudo systemctl start docker
+# 安装
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
 # 验证
+sudo docker run hello-world
+```
+
+### CentOS/RHEL
+
+```bash
+sudo yum install -y yum-utils
+sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+sudo yum install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo systemctl enable docker
+sudo systemctl start docker
+```
+
+### 配置免 sudo
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
 docker run hello-world
 ```
 
-### 3. Docker 基础命令
+### 配置镜像加速
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
+{
+  "registry-mirrors": [
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://registry.docker-cn.com"
+  ],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+### 验证安装
 
 ```bash
 # 查看版本
-docker version
+docker --version
+docker compose version
+
+# 查看系统信息
 docker info
 
-# 镜像操作
-docker pull ubuntu:22.04
-docker images
-docker rmi ubuntu:22.04
+# 运行测试容器
+docker run hello-world
 
-# 容器操作
-docker run -it ubuntu:22.04 bash
-docker run -d -p 8080:80 nginx
-docker ps
+# 查看容器
 docker ps -a
-docker stop <container_id>
-docker rm <container_id>
-docker logs -f <container_id>
-docker exec -it <container_id> bash
-
-# 系统清理
-docker system df       # 查看磁盘使用
-docker system prune    # 清理未使用的资源
 ```
-
-### 4. SRE 实战
-
-```
-场景：服务器磁盘满
-排查：
-1. docker system df — 发现 images 占 50GB
-2. docker image ls — 大量未使用的旧镜像
-3. docker system prune -a — 清理所有未使用的镜像
-4. 长期：配置镜像清理 cron + 镜像大小限制
-```
-
 
 ---
 
-## 💻 实战练习
+## 🧪 练习题
 
-### 练习 1：多阶段构建优化
+### 练习 1：验证安装
 
-```dockerfile
-# Build stage
-FROM golang:1.21 AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
+运行以下命令验证 Docker 安装正确：
 
-# Runtime stage
-FROM alpine:3.18
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
+<details>
+<summary>答案</summary>
+
+```bash
+# 检查 Docker 服务
+systemctl status docker
+
+# 运行测试容器
+docker run hello-world
+
+# 查看版本
+docker --version
+docker info
+
+# 查看已下载的镜像
+docker images
 ```
-
-### 练习 2：docker-compose 编排
-
-```yaml
-version: "3.8"
-services:
-  web:
-    build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
-    environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
-  db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-volumes:
-  pgdata:
-```
-
+</details>
 
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:18*  
-*Generated by Hermes Agent with review*
+- [Docker 官方文档](https://docs.docker.com/)
+- [Docker vs VM 详细对比](https://docs.docker.com/get-started/overview/)
+- [容器运行时规范 OCI](https://opencontainers.org/)

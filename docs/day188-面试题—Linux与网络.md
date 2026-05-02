@@ -8,158 +8,127 @@
 
 ## 🎯 学习目标
 
-完成 Day 188 的学习后，你应该掌握：
-- 理解 面试题 — Linux 与网络 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 复习 Linux 和网络核心知识点
+- 能口头回答常见面试题
+- 能用实际案例支撑回答
 
 ---
 
-## 📖 详细知识点
+## 📖 常见面试题
 
-### 1. Docker
+### 1. Linux 相关
 
-Docker 是 SRE 工程师的核心工具。
+**Q1: 解释 Linux 文件权限 755、644、600 的含义**
 
-### 2. 核心概念
-
-- 镜像（Image）：只读模板
-- 容器（Container）：运行实例
-- 数据卷（Volume）：持久化存储
-- 网络（Network）：容器间通信
-
-### 3. SRE 实战
-
-- 容器化应用部署
-- 多环境一致性
-- 快速扩缩容
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：企业级服务器初始化
-
-**场景**：新购 3 台云服务器，30 分钟内完成初始化并交付。
-
-```bash
-#!/bin/bash
-# enterprise_server_init.sh
-set -euo pipefail
-
-# 1. 系统更新与安全补丁
-apt update && apt upgrade -y
-
-# 2. 创建运维用户（禁止 root 直接登录）
-useradd -m -s /bin/bash -G sudo ops-admin
-
-# 3. SSH 安全加固
-sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-systemctl restart sshd
-
-# 4. 防火墙
-ufw default deny incoming
-ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp
-ufw enable
-
-# 5. 安装监控基础
-apt install -y htop iotop net-tools strace lsof sysstat
-
-echo "服务器初始化完成"
+```
+755 (rwxr-xr-x): 所有者读写执行，组和其他只读执行
+  → 适用于：目录、脚本、二进制文件
+644 (rw-r--r--): 所有者读写，组和其他只读
+  → 适用于：配置文件、文档
+600 (rw-------): 所有者读写，其他人无权限
+  → 适用于：私钥、敏感文件
 ```
 
-### 练习 2：故障排查挑战
+**Q2: 进程状态 R/S/D/Z/T 分别代表什么？Zombie 进程如何处理？**
 
-**场景**：生产服务器 CPU 持续 100%，10 分钟内定位根因。
+```
+R (Running): 运行中或就绪
+S (Sleeping): 可中断睡眠（等待 I/O 或信号）
+D (Disk Sleep): 不可中断睡眠（等待磁盘 I/O，不能 kill）
+Z (Zombie): 僵尸进程（已终止但父进程未回收）
+T (Stopped): 暂停状态
 
-```bash
-# 定位高 CPU 进程
-ps aux --sort=-%cpu | head -5
-# 检查进程状态
-ps -eo pid,user,%cpu,%mem,stat,comm | sort -k3 -rn | head -10
-# 跟踪系统调用
-strace -p <PID> -c -s 100
-# 检查 IO 等待
-iostat -x 1 3
+Zombie 处理：
+- 不能直接 kill（已经死了）
+- 需要 kill 父进程让 init 回收
+- 或修复父进程的 wait() 逻辑
 ```
 
-### 练习 3：性能基准测试
+**Q3: load average 的三个值代表什么？多少算高？**
 
-```bash
-# 磁盘性能
-dd if=/dev/zero of=/tmp/test bs=1M count=1024 oflag=direct
-# 内存性能
-sysbench memory --memory-block-size=1M --memory-total-size=10G run
+```
+1/5/15 分钟平均负载
+负载 = 运行中进程数 + 等待 CPU 的进程数 + 不可中断睡眠的进程数
+
+判断标准：
+- 负载 < CPU 核数：正常
+- 负载 = CPU 核数：饱和
+- 负载 > CPU 核数：过载
+- 4 核机器，load = 8 → 过载 2 倍
 ```
 
+**Q4: 如何用 grep + awk 分析 Nginx 日志找出 Top 10 IP？**
+
+```bash
+awk '{print $1}' /var/log/nginx/access.log | \
+    sort | uniq -c | sort -rn | head -10
+```
+
+### 2. 网络相关
+
+**Q5: 解释 TCP 三次握手和四次挥手**
+
+```
+三次握手：
+  Client → SYN → Server
+  Client ← SYN-ACK ← Server
+  Client → ACK → Server
+  → 连接建立
+
+四次挥手：
+  Client → FIN → Server  (我要关闭了)
+  Client ← ACK ← Server  (好的，等我把剩下的数据发完)
+  Client ← FIN ← Server  (我发完了，我也要关了)
+  Client → ACK → Server  (收到，关闭)
+  → 连接关闭
+
+TIME_WAIT: 主动关闭方等待 2*MSL（通常 60s），确保对端收到最后的 ACK
+```
+
+**Q6: "网站打不开"如何排查？**
+
+```
+1. ping → 网络是否通？
+2. nslookup/dig → DNS 解析是否正确？
+3. telnet/curl → 端口是否通？
+4. curl -vvv → HTTP 响应码是什么？
+5. ss -tlnp → 服务是否在监听？
+6. journalctl -u nginx → 服务日志有什么错误？
+7. 检查防火墙/安全组规则
+```
+
+**Q7: HTTPS 握手过程**
+
+```
+1. Client → ClientHello（支持的协议版本、密码套件、随机数）
+2. Server → ServerHello（选择的协议版本、密码套件、随机数）
+3. Server → Certificate（发送服务器证书）
+4. Server → ServerKeyExchange（可选）
+5. Server → ServerHelloDone
+6. Client → 验证证书 → 生成预主密钥 → 用服务器公钥加密发送
+7. Client → ChangeCipherSpec → Finished
+8. Server → 用私钥解密 → 生成会话密钥 → ChangeCipherSpec → Finished
+→ 后续通信用会话密钥对称加密
+```
 
 ---
 
-## 📚 最新优质资源
+## 💻 模拟面试
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
+1. 计时 5 分钟，口头回答 Q1-Q4
+2. 录音后回放，检查是否清晰准确
+3. 对每个问题准备一个实际案例
 
 ---
 
 ## ✅ 完成检查
 
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
+- [ ] 能口头回答所有 Linux 面试题
+- [ ] 能口头回答所有网络面试题
+- [ ] 每个问题都有实际案例支撑
+- [ ] 完成模拟面试
 
 ---
 
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:29*  
+*由 SRE 学习计划自动生成 | 2026-05-02*  
 *Generated by Hermes Agent with review*

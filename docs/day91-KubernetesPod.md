@@ -1,241 +1,94 @@
 # Day 91: Kubernetes Pod
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Kubernetes Pod  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Kubernetes Pod
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 91 的学习后，你应该掌握：
-- 理解 Kubernetes Pod 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Pod 的概念和生命周期
+- 能编写 Pod YAML
+- 掌握 Pod 的调试方法
 
 ---
 
-## 📖 详细知识点
+## 📖 Pod 详解
 
-### 1. Pod — K8s 最小调度单元
-
-#### 1.1 Pod 概念
-
-Pod 是 K8s 中**最小的部署单元**，包含一个或多个容器：
+### 1. 什么是 Pod
 
 ```
-Pod
-├── Container 1: 应用容器 (nginx)
-├── Container 2: Sidecar (日志收集)
-├── 共享网络: 同一个 IP、端口空间
-├── 共享存储: 同一个 Volume 挂载点
-└── 共享 IPC/UTS namespace
+Pod 是 K8s 最小的部署单元：
+- 一个 Pod 可以包含一个或多个容器
+- Pod 内的容器共享网络和存储
+- Pod 是调度的基本单位（不是容器）
 ```
 
-#### 1.2 Pod YAML
+### 2. Pod YAML
 
 ```yaml
 apiVersion: v1
 kind: Pod
 metadata:
-  name: web-server
+  name: myapp
   labels:
-    app: nginx
-    env: production
+    app: myapp
 spec:
   containers:
-  - name: nginx
-    image: nginx:1.25-alpine
-    ports:
-    - containerPort: 80
-      protocol: TCP
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "256Mi"
-    readinessProbe:
-      httpGet:
-        path: /
-        port: 80
-      initialDelaySeconds: 5
-      periodSeconds: 10
-    livenessProbe:
-      httpGet:
-        path: /
-        port: 80
-      initialDelaySeconds: 15
-      periodSeconds: 20
-    volumeMounts:
-    - name: html
-      mountPath: /usr/share/nginx/html
-  volumes:
-  - name: html
-    configMap:
-      name: nginx-html
-```
-
-#### 1.3 探针详解
-
-| 探针 | 作用 | 失败后果 |
-|------|------|----------|
-| **livenessProbe** | 检查容器是否存活 | 重启容器 |
-| **readinessProbe** | 检查是否准备好接收流量 | 从 Service 中移除 |
-| **startupProbe** | 检查慢启动应用 | 延迟 livenessProbe 检查 |
-
-```yaml
-# 启动探针 — 给慢启动应用（如 Java）足够时间
-startupProbe:
-  httpGet:
-    path: /health
-    port: 8080
-  failureThreshold: 30     # 最多失败 30 次
-  periodSeconds: 10        # 每 10 秒检查
-  # 总等待时间 = 30 × 10 = 300 秒（5 分钟）
-```
-
-### 2. Pod 生命周期
-
-```
-Pending → 调度中（镜像拉取中）
-  ↓
-Running → 容器运行中
-  ↓
-Succeeded/Failed → 任务完成/失败
-  或
-Terminating → 优雅关闭
-  ↓
-```
-
-```bash
-# 查看 Pod 状态
-kubectl get pods
-kubectl describe pod web-server
-
-# 查看事件
-kubectl get events --sort-by='.lastTimestamp'
-
-# 强制删除（慎用！）
-kubectl delete pod web-server --grace-period=0 --force
-```
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：部署完整应用
-
-```yaml
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    metadata:
-      labels:
-        app: web-app
-    spec:
-      containers:
-      - name: web-app
-        image: myapp:latest
-        ports:
+    - name: app
+      image: myapp:v1
+      ports:
         - containerPort: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "250m"
+        limits:
+          memory: "256Mi"
+          cpu: "500m"
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080
+        initialDelaySeconds: 3
 ```
+
+### 3. Pod 生命周期
+
+```
+Pending → Running → Succeeded/Failed
+  │          │
+  │          └─ 容器可能重启（restartPolicy）
+  │
+  └─ 等待调度（资源不足、镜像拉取中）
+
+重启策略：
+  Always（默认）— 总是重启
+  OnFailure — 失败时重启
+  Never — 从不重启
+```
+
+### 4. 常用命令
 
 ```bash
-kubectl apply -f deployment.yaml
-kubectl get pods -w
-kubectl rollout status deployment/web-app
-kubectl rollout undo deployment/web-app  # 回滚
+kubectl apply -f pod.yaml
+kubectl get pods
+kubectl describe pod myapp
+kubectl logs myapp
+kubectl exec -it myapp -- /bin/bash
+kubectl delete pod myapp
+kubectl port-forward myapp 8080:8080
 ```
 
-
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:20*  
-*Generated by Hermes Agent with review*
+- [Pod 文档](https://kubernetes.io/docs/concepts/workloads/pods/)

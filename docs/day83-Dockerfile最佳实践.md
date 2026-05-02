@@ -1,218 +1,89 @@
 # Day 83: Dockerfile 最佳实践
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Dockerfile 最佳实践  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Dockerfile 最佳实践
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 83 的学习后，你应该掌握：
-- 理解 Dockerfile 最佳实践 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 掌握编写高效 Dockerfile 的原则
+- 理解安全最佳实践
+- 能优化镜像大小和构建速度
 
 ---
 
-## 📖 详细知识点
+## 📖 最佳实践
 
-### 1. Dockerfile 最佳实践
+### 1. 选择精简基础镜像
 
-#### 1.1 优化镜像大小
+```
+推荐：
+  alpine（~5MB）— 最小，但 musl libc 可能有兼容问题
+  debian-slim（~80MB）— 平衡大小和兼容性
+  distroless（~20MB）— Google 出品，只包含运行时
+
+不推荐：
+  ubuntu（~77MB）— 包含很多不必要的包
+  python:latest（~900MB）— 完整开发环境
+```
+
+### 2. 利用构建缓存
 
 ```dockerfile
-# ❌ 反模式
-FROM python:3.11
-COPY . .
-RUN pip install -r requirements.txt
-RUN apt update && apt install -y build-essential
-CMD ["python", "app.py"]
-
-# ✅ 最佳实践
+# 将不变的指令放前面
 FROM python:3.11-slim
-
 WORKDIR /app
-
-# 利用层缓存：先复制依赖文件
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# 再复制代码
 COPY . .
-
-# 非 root 运行
-RUN useradd -r appuser && chown -R appuser:appuser /app
-USER appuser
-
-EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=10s \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
+CMD ["python", "app.py"]
 ```
 
-**大小对比**：
-| 镜像 | 大小 |
-|------|------|
-| python:3.11 | ~900MB |
-| python:3.11-slim | ~150MB |
-| python:3.11-alpine | ~50MB |
-
-### 2. 安全基线
+### 3. 多阶段构建
 
 ```dockerfile
-# 1. 固定版本
-FROM nginx:1.25.3-alpine  # 不要 nginx:latest
-
-# 2. 非 root 运行
-RUN addgroup -S app && adduser -S appuser -G app
-USER appuser
-
-# 3. 只读根文件系统
-# docker run --read-only nginx
-
-# 4. 删除不必要的包
-RUN apt-get purge -y --auto-remove gcc make
-
-# 5. 多阶段构建（不泄露构建工具）
 FROM node:18 AS builder
-# ... 构建 ...
-FROM node:18-alpine
-COPY --from=builder /app/dist /app/dist
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
 ```
 
-### 3. 安全扫描
-
-```bash
-# Trivy 漏洞扫描
-trivy image nginx:latest
-
-# 输出示例：
-# nginx:1.25.3 (alpine 3.19.0)
-# Total: 0 (UNKNOWN: 0, LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0)
-
-# 集成到 CI
-trivy image --exit-code 1 --severity CRITICAL,HIGH myapp:latest
-```
-
-
----
-
-## 💻 实战练习
-
-### 练习 1：多阶段构建优化
+### 4. 安全实践
 
 ```dockerfile
-# Build stage
-FROM golang:1.21 AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o myapp
+# 不用 root 运行
+RUN useradd -r -s /bin/false appuser
+USER appuser
 
-# Runtime stage
-FROM alpine:3.18
-RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/myapp /usr/local/bin/myapp
-USER 1000:1000
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD wget -qO- http://localhost:8080/health || exit 1
-CMD ["myapp"]
+# 不暴露敏感信息
+# 不要用 ENV 存密码
+# 用 --secret 或 Docker secrets
+
+# 扫描漏洞
+docker scout cve myimage:latest
 ```
 
-### 练习 2：docker-compose 编排
+### 5. .dockerignore
 
-```yaml
-version: "3.8"
-services:
-  web:
-    build: .
-    ports: ["8080:8080"]
-    depends_on: [db, redis]
-    environment:
-      - DB_HOST=db
-      - REDIS_URL=redis://redis:6379
-  db:
-    image: postgres:15-alpine
-    volumes: [pgdata:/var/lib/postgresql/data]
-    environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-volumes:
-  pgdata:
+```
+.git
+node_modules
+__pycache__
+*.pyc
+.env
+Dockerfile
+.dockerignore
 ```
 
-
 ---
 
-## 📚 最新优质资源
+## 📚 扩展阅读
 
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:19*  
-*Generated by Hermes Agent with review*
+- [Dockerfile 最佳实践](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)

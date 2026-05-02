@@ -1,137 +1,168 @@
-# Day 183: 可观测性：Prometheus + Grafana + Loki + Jaeger
+# Day 183: 可观测性 — Prometheus + Grafana + Loki + Jaeger
 
 > 📅 日期：2026-05-02  
-> 📖 学习主题：可观测性：Prometheus + Grafana + Loki + Jaeger  
+> 📖 学习主题：可观测性：Prometheus+Grafana+Loki+Jaeger  
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 183 的学习后，你应该掌握：
-- 理解 可观测性：Prometheus + Grafana + Loki + Jaeger 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 完成 Capstone 项目的可观测性部分
+- 部署 Prometheus + Grafana + Loki + Jaeger 完整栈
+- 配置数据源联动和 Dashboard 联动
+- 验证从指标异常到日志/Trace 定位的完整排查流程
 
 ---
 
 ## 📖 详细知识点
 
-### 1. 可观测性
+### 1. Capstone 可观测性架构
 
-可观测性三大支柱：Metrics（指标）、Logs（日志）、Traces（链路）。
+```
+                    ┌──────────────────────┐
+                    │    Grafana 3000       │
+                    │  统一仪表盘 + 告警     │
+                    └──────────┬───────────┘
+                               │
+           ┌───────────────────┼───────────────────┐
+           ↓                   ↓                   ↓
+    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+    │ Prometheus  │    │    Loki     │    │   Jaeger    │
+    │    9090     │    │    3100     │    │   16686     │
+    │  (Metrics)  │    │   (Logs)    │    │  (Traces)   │
+    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+           │                  │                  │
+    ┌──────┴──────┐   ┌──────┴──────┐   ┌───────┴──────┐
+    │ node_exp    │   │  Promtail   │   │ OTel Coll.   │
+    │ app /metrics│   │  /var/log   │   │ 4317/4318    │
+    └─────────────┘   └─────────────┘   └──────────────┘
+```
 
-### 2. 核心工具
+### 2. docker-compose 部署
 
-- Prometheus: 指标采集
-- Grafana: 可视化
-- Loki/ELK: 日志
-- Jaeger: 链路追踪
+```yaml
+version: '3'
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prom-data:/prometheus
 
-### 3. SRE 实战
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+    volumes:
+      - grafana-data:/var/lib/grafana
 
-- 定义 SLO/SLI
-- 搭建监控告警
-- 故障快速定位
+  loki:
+    image: grafana/loki:latest
+    ports: ["3100:3100"]
+    volumes:
+      - loki-data:/loki
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports: ["16686:16686", "14268:14268", "9411:9411"]
+
+volumes:
+  prom-data:
+  grafana-data:
+  loki-data:
+```
+
+### 3. Grafana 数据源配置
+
+```bash
+# 通过 API 自动配置数据源
+curl -X POST http://admin:admin123@localhost:3000/api/datasources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Prometheus",
+    "type": "prometheus",
+    "url": "http://prometheus:9090",
+    "access": "proxy"
+  }'
+
+curl -X POST http://admin:admin123@localhost:3000/api/datasources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Loki",
+    "type": "loki",
+    "url": "http://loki:3100",
+    "access": "proxy"
+  }'
+
+curl -X POST http://admin:admin123@localhost:3000/api/datasources \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jaeger",
+    "type": "jaeger",
+    "url": "http://jaeger:16686",
+    "access": "proxy"
+  }'
+```
+
+### 4. Dashboard 联动
+
+```
+在 Grafana 中配置：
+1. Time Series 面板（Prometheus 数据源）
+   → 点击异常数据点 → Explore → 跳转到 Loki Logs
+2. Logs 面板（Loki 数据源）
+   → 点击 trace_id → Explore → 跳转到 Jaeger Trace
+3. Trace 面板（Jaeger 数据源）
+   → 点击 Span → 查看对应时间段的 Logs
+```
+
+### 5. 验证流程
+
+```
+1. 模拟故障：停止某个微服务
+2. Grafana Dashboard 显示：
+   - Metrics: 该服务实例 down = 0
+   - Metrics: 错误率飙升到 100%
+3. 点击异常点 → 跳转到 Logs
+   - Loki 显示：连接拒绝错误
+4. 在 Logs 中找到 trace_id
+   - 点击 trace_id → 跳转到 Jaeger
+5. Jaeger 显示完整请求链路
+   - 确认故障点在哪个服务
+6. 修复 → 观察 Dashboard 恢复
+```
 
 ---
 
 ## 💻 实战练习
 
-### 练习 1：可观测性：Prometheus + Grafana + Loki + Jaeger 实战
+### 练习 1：部署完整可观测性栈
 
-**场景**：将 可观测性：Prometheus + Grafana + Loki + Jaeger 应用到生产环境中。
+1. 用 docker-compose 部署 Prometheus + Grafana + Loki + Jaeger
+2. 配置所有数据源
+3. 导入 Node Exporter Dashboard（14720 号）
+4. 验证数据正常展示
 
-```bash
-# 1. 基础操作 - 查阅官方文档完成
-# 2. 进阶操作 - 结合实际场景
-# 3. 故障排查 - 模拟常见问题
-```
+### 练习 2：Dashboard 联动
 
-### 练习 2：自动化脚本
-
-```bash
-#!/bin/bash
-set -euo pipefail
-# TODO: 根据主题实现具体的自动化逻辑
-echo "自动化任务完成"
-```
-
-### 练习 3：监控配置
-
-```bash
-# 为 可观测性：Prometheus + Grafana + Loki + Jaeger 配置监控指标
-# 设置告警阈值
-# 编写健康检查脚本
-```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
+1. 创建自定义 Dashboard
+2. 配置 Metrics → Logs → Traces 联动
+3. 模拟故障并验证完整排查流程
 
 ---
 
 ## ✅ 完成检查
 
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
+- [ ] 能部署 Prometheus + Grafana + Loki + Jaeger
+- [ ] 能配置所有数据源
+- [ ] 能创建联动 Dashboard
+- [ ] 能完成从指标到日志到 Trace 的排查流程
+- [ ] 完成练习 1：部署完整可观测性栈
 
 ---
 
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:29*  
+*由 SRE 学习计划自动生成 | 2026-05-02*  
 *Generated by Hermes Agent with review*

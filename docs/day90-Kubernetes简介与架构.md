@@ -1,235 +1,87 @@
 # Day 90: Kubernetes 简介与架构
 
-> 📅 日期：2026-05-02  
-> 📖 学习主题：Kubernetes 简介与架构  
+> 📅 日期：2026-05-03
+> 📖 学习主题：Kubernetes 简介与架构
 > ⏰ 计划学习时间：2-3 小时
 
 ---
 
 ## 🎯 学习目标
 
-完成 Day 90 的学习后，你应该掌握：
-- 理解 Kubernetes 简介与架构 的核心概念和原理
-- 能够独立完成相关命令的操作练习
-- 在实际工作中正确应用这些知识
-- 为 SRE 进阶打下坚实基础
+- 理解 Kubernetes 的核心概念和架构
+- 掌握 Master/Node 组件的作用
+- 理解 Pod、Service、Deployment 的关系
 
 ---
 
-## 📖 详细知识点
+## 📖 K8s 架构
 
-### 1. Kubernetes 简介
-
-#### 1.1 为什么需要 K8s？
+### 1. 为什么需要 K8s
 
 ```
-传统部署 → 问题：
-1. 服务器手工部署应用 → 环境不一致
-2. 扩缩容手动操作 → 慢、易错
-3. 故障需要人工处理 → 不可靠
-4. 资源利用率低 → 浪费
+Docker 的问题：
+- 如何调度容器到多台机器？
+- 如何自动扩缩容？
+- 如何做服务发现？
+- 如何做滚动更新？
 
-K8s 解决方案：
-1. 声明式 API → 期望状态 = 实际状态
-2. 自动调度 → 根据资源需求分配到合适节点
-3. 自愈 → 容器挂了自动重启，节点挂了自动迁移
-4. 服务发现 + 负载均衡 → 无需手动配置
+Kubernetes 解决：
+- 容器编排（调度、部署、管理）
+- 自动扩缩容（HPA）
+- 服务发现和负载均衡
+- 滚动更新和回滚
+- 自我修复（自愈）
 ```
 
-#### 1.2 K8s 架构
+### 2. K8s 架构
 
 ```
-┌─────────────────────────────────────────┐
-│           Control Plane (Master)         │
-├─────────────────────────────────────────┤
-│  API Server ← 唯一入口，所有操作经过这里  │
-│  etcd       ← 键值存储，集群状态          │
-│  Scheduler  ← 调度 Pod 到节点            │
-│  Controller ← 维持期望状态               │
-│             Manager                      │
-├─────────────────────────────────────────┤
-│           Worker Nodes                   │
-├─────────────────────────────────────────┤
-│  kubelet    ← 与 API Server 通信         │
-│  kube-proxy ← 网络代理/负载均衡          │
-│  Container Runtime (containerd/cri-o)    │
-│                                          │
-│  ┌─────┐  ┌─────┐  ┌─────┐             │
-│  │Pod 1│  │Pod 2│  │Pod 3│ ← 容器组    │
-│  └─────┘  └─────┘  └─────┘             │
-└─────────────────────────────────────────┘
+Master 节点（控制平面）：
+  ├── API Server（所有交互的入口）
+  ├── etcd（键值存储，集群状态）
+  ├── Scheduler（调度 Pod 到节点）
+  └── Controller Manager（维护期望状态）
+
+Node 节点（工作节点）：
+  ├── kubelet（与 Master 通信，管理容器）
+  ├── kube-proxy（网络代理，服务发现）
+  └── Container Runtime（Docker/containerd）
 ```
 
-### 2. 安装 minikube
+### 3. 核心概念
+
+| 概念 | 说明 |
+|------|------|
+| Pod | 最小部署单元，包含一个或多个容器 |
+| Service | 稳定的网络端点，暴露 Pod |
+| Deployment | 管理 Pod 的副本和更新 |
+| Namespace | 逻辑隔离 |
+| ConfigMap | 配置管理 |
+| Secret | 敏感信息管理 |
+| Volume | 持久化存储 |
+
+### 4. 安装 minikube
 
 ```bash
 # Linux
 curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 sudo install minikube-linux-amd64 /usr/local/bin/minikube
 
-# 启动集群
-minikube start --driver=docker --cpus=4 --memory=8192
+# 启动
+minikube start --driver=docker
+
+# 安装 kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
 # 验证
 kubectl cluster-info
 kubectl get nodes
-kubectl get pods -A
 ```
-
-### 3. kubectl 基础
-
-```bash
-# 查看资源
-kubectl get nodes
-kubectl get pods
-kubectl get pods -n kube-system
-kubectl get all
-
-# 详细信息
-kubectl describe node minikube
-kubectl describe pod <pod-name>
-
-# 日志
-kubectl logs <pod-name>
-kubectl logs -f <pod-name>
-
-# 进入容器
-kubectl exec -it <pod-name> -- /bin/sh
-
-# 创建/删除
-kubectl apply -f manifest.yaml
-kubectl delete -f manifest.yaml
-```
-
-### 4. SRE 视角：K8s 带来的运维变革
-
-```
-Before K8s:
-- 每台服务器安装 Agent → 配置管理
-- 手动编写部署脚本 → 易错
-- 监控告警手动处理 → 慢
-
-After K8s:
-- 声明式 API → 所有操作可审计
-- 自动调度 → 运维不再关心"跑在哪台机器"
-- 自愈 → 减少 On-Call 告警
-- 水平扩缩容 → 流量高峰自动应对
-```
-
 
 ---
 
-## 💻 实战练习
+## 📚 扩展阅读
 
-### 练习 1：部署完整应用
-
-```yaml
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    metadata:
-      labels:
-        app: web-app
-    spec:
-      containers:
-      - name: web-app
-        image: myapp:latest
-        ports:
-        - containerPort: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "500m"
-```
-
-```bash
-kubectl apply -f deployment.yaml
-kubectl get pods -w
-kubectl rollout status deployment/web-app
-kubectl rollout undo deployment/web-app  # 回滚
-```
-
-
----
-
-## 📚 最新优质资源
-
-### 官方文档
-- [Ubuntu 22.04 LTS 官方文档](https://ubuntu.com/documentation)
-- [Linux FHS 标准 3.0](https://refspecs.linuxfoundation.org/FHS_3.0/fhs/index.html)
-- [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/)
-- [Bash 官方手册](https://www.gnu.org/software/bash/manual/)
-
-### 推荐教程
-- [MIT The Missing Semester](https://missing.csail.mit.edu/) - 工程师必学但学校不教的技能
-- [Linux Journey](https://linuxjourney.com/) - 免费的 Linux 学习路径
-- [Ryan's Tutorials - Linux](https://ryanstutorials.net/linuxtutorial/) - 入门到进阶
-- [Linux Command Library](https://linuxcommand.org/) - 命令行入门
-
-### 视频课程
-- [Bilibili: 鸟哥的Linux私房菜（基础篇）](https://www.bilibili.com/video/BV1Vt411X7y6/)
-- [YouTube: NetworkChuck - Linux Basics](https://www.youtube.com/playlist?list=PLI9KFC2-DCX-6LVEU2c2XBGWckzVqKS6j)
-- [YouTube: DevOps Journey - Linux for DevOps](https://www.youtube.com/playlist?list=PL2_OBreMn7FqZkvLWn1Br7W1v5E5XKJyI)
-
-### 实战练习平台
-- [OverTheWire Bandit](https://overthewire.org/wargames/bandit/) - 史上最好的 Linux 入门练习
-- [KodeKloud Engineer](https://kodekloud.com) - 交互式 K8s 和 DevOps 练习
-- [Play with Docker](https://play.docker.com/) - 免费 Docker 练习环境
-- [Learn Linux TV](https://www.learnlinux.tv/) - 视频 + 实战
-
-### SRE 相关资源
-- [Google SRE Books](https://sre.google/sre-book/table-of-contents/)
-- [Linux Performance](http://www.brendangregg.com/linuxperf.html) - Brendan Gregg
-- [Ops School](http://www.ops-school.org/) - 运维工程师学习路径
-
-
----
-
-## 📝 笔记
-
-### 今日学习总结
-
-（在此记录你的学习心得）
-
-### 遇到的问题与解决
-
-| 问题 | 解决方案 |
-|------|----------|
-| 问题描述 | 如何解决 |
-
-### 延伸思考
-
-- 思考 1：...
-- 思考 2：...
-
----
-
-## ✅ 完成检查
-
-- [ ] 理解核心概念（能用自己的话解释）
-- [ ] 完成所有基础命令练习
-- [ ] 完成实战场景练习
-- [ ] 阅读了至少一个扩展资源
-- [ ] 记录了学习笔记
-- [ ] 理解了命令背后的原理
-
----
-
-*由 SRE 学习计划自动生成 | 2026-05-02 15:29:20*  
-*Generated by Hermes Agent with review*
+- [Kubernetes 官方文档](https://kubernetes.io/docs/)
+- [K8s 架构详解](https://kubernetes.io/docs/concepts/overview/components/)
