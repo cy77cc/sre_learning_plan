@@ -18,6 +18,16 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
+# Import enhanced content generators
+from generators_enhanced import (
+    generate_go_content, generate_db_content,
+    generate_docker_content, generate_k8s_content,
+    generate_cloud_content, generate_iac_content,
+    generate_observability_content, generate_cicd_content,
+    generate_llmops_content, generate_sre_practice_content,
+    generate_capstone_content, generate_interview_content,
+)
+
 # ============ 配置 ============
 BASE_DIR = Path("/root/sre_learning")
 DOCS_DIR = BASE_DIR / "docs"
@@ -3045,6 +3055,7 @@ def generate_default_content(day: int, topic: str) -> str:
         'iptables': generate_network_basic_content,
         'http': generate_network_basic_content,
         'socket': generate_network_basic_content,
+        '路由': generate_network_basic_content,
 
         # Phase 3: Python
         'python': generate_python_basic_content,
@@ -3058,45 +3069,150 @@ def generate_default_content(day: int, topic: str) -> str:
         '多线程': generate_python_basic_content,
         '网络编程': generate_python_basic_content,
         'requests': generate_python_basic_content,
+        'sqlite': generate_python_basic_content,
+        '数据库': generate_python_basic_content,
+
+        # Phase 3.5: Go
+        'go': generate_go_content,
+        '环境搭建': generate_go_content,
+        '基础语法': generate_go_content,
+        '错误处理': generate_go_content,
+        '数据结构': generate_go_content,
+        '切片': generate_go_content,
+        '接口': generate_go_content,
+        '组合': generate_go_content,
+        '并发': generate_go_content,
+        'goroutine': generate_go_content,
+        'channel': generate_go_content,
+        '标准库': generate_go_content,
+        'cobra': generate_go_content,
+        'context': generate_go_content,
+        '超时': generate_go_content,
+        '测试': generate_go_content,
+
+        # Phase 3.5: Database
+        'mysql': generate_db_content,
+        'redis': generate_db_content,
 
         # Phase 4: Docker
-        'docker': generate_docker_basic_content,
-        '镜像': generate_docker_basic_content,
-        '容器': generate_docker_basic_content,
-        'compose': generate_docker_basic_content,
-        '私有': generate_docker_basic_content,
-        '安全': generate_docker_basic_content,
+        'docker': generate_docker_content,
+        '镜像': generate_docker_content,
+        'dockerfile': generate_docker_content,
+        '容器': generate_docker_content,
+        '数据管理': generate_docker_content,
+        '网络': generate_docker_content,
+        'compose': generate_docker_content,
+        '私有': generate_docker_content,
+        '安全': generate_docker_content,
+        '监控': generate_docker_content,
+        '日志': generate_docker_content,
 
-        # Phase 5: AWS & IaC
-        'aws': generate_cloud_basic_content,
-        'ec2': generate_cloud_basic_content,
-        'vpc': generate_cloud_basic_content,
-        'terraform': generate_iac_basic_content,
-        'ansible': generate_iac_basic_content,
+        # Phase 5: Kubernetes
+        'kubernetes': generate_k8s_content,
+        'k8s': generate_k8s_content,
+        'pod': generate_k8s_content,
+        'deployment': generate_k8s_content,
+        'statefulset': generate_k8s_content,
+        'daemonset': generate_k8s_content,
+        'job': generate_k8s_content,
+        'cronjob': generate_k8s_content,
+        'service': generate_k8s_content,
+        'ingress': generate_k8s_content,
+        'configmap': generate_k8s_content,
+        'secret': generate_k8s_content,
+        'pv': generate_k8s_content,
+        'pvc': generate_k8s_content,
+        'rbac': generate_k8s_content,
+        '调度': generate_k8s_content,
+        '亲和': generate_k8s_content,
+        'hpa': generate_k8s_content,
+        'helm': generate_k8s_content,
 
-        # Phase 6: Observability
-        'prometheus': generate_observability_basic_content,
-        'grafana': generate_observability_basic_content,
-        'alertmanager': generate_observability_basic_content,
-        'elk': generate_observability_basic_content,
-        'loki': generate_observability_basic_content,
-        'jaeger': generate_observability_basic_content,
+        # Phase 6: AWS & Cloud
+        'aws': generate_cloud_content,
+        'ec2': generate_cloud_content,
+        'vpc': generate_cloud_content,
+        's3': generate_cloud_content,
+        'rds': generate_cloud_content,
+        'elb': generate_cloud_content,
+        'auto scaling': generate_cloud_content,
+        'cloudwatch': generate_cloud_content,
+        'route': generate_cloud_content,
+        'eks': generate_cloud_content,
+        '账户': generate_cloud_content,
+        '高可用': generate_cloud_content,
+        'saa': generate_cloud_content,
 
-        # Phase 7: CI/CD
-        'ci/cd': generate_cicd_basic_content,
-        'github': generate_cicd_basic_content,
-        'jenkins': generate_cicd_basic_content,
-        'argocd': generate_cicd_basic_content,
-        '部署': generate_cicd_basic_content,
-        'vault': generate_cicd_basic_content,
+        # Phase 7: IaC
+        'terraform': generate_iac_content,
+        'ansible': generate_iac_content,
+        'iac': generate_iac_content,
+        'playbook': generate_iac_content,
+        'role': generate_iac_content,
+        'jinja': generate_iac_content,
+        '模板': generate_iac_content,
 
-        # Phase 8: SRE Practice
+        # Phase 8: Observability
+        'prometheus': generate_observability_content,
+        'grafana': generate_observability_content,
+        'alertmanager': generate_observability_content,
+        'promql': generate_observability_content,
+        'elk': generate_observability_content,
+        'logstash': generate_observability_content,
+        'fluent': generate_observability_content,
+        'kibana': generate_observability_content,
+        'loki': generate_observability_content,
+        'jaeger': generate_observability_content,
+        'apm': generate_observability_content,
+        'opentelemetry': generate_observability_content,
+        '可观测': generate_observability_content,
+
+        # Phase 9: CI/CD
+        'ci/cd': generate_cicd_content,
+        'github': generate_cicd_content,
+        'gitlab': generate_cicd_content,
+        'jenkins': generate_cicd_content,
+        'argocd': generate_cicd_content,
+        '部署': generate_cicd_content,
+        'vault': generate_cicd_content,
+        '混沌': generate_cicd_content,
+        '扫描': generate_cicd_content,
+        'gitops': generate_cicd_content,
+        '构建': generate_cicd_content,
+
+        # Phase 10: LLM Ops
+        'llm': generate_llmops_content,
+        'gpu': generate_llmops_content,
+        '推理': generate_llmops_content,
+        'vllm': generate_llmops_content,
+        '微调': generate_llmops_content,
+        'rag': generate_llmops_content,
+        '向量': generate_llmops_content,
+        '模型': generate_llmops_content,
+        'token': generate_llmops_content,
+        'prompt': generate_llmops_content,
+
+        # Phase 11: SRE Practice
         'on-call': generate_sre_practice_content,
         '事故': generate_sre_practice_content,
         'slo': generate_sre_practice_content,
         '容量': generate_sre_practice_content,
         '灾备': generate_sre_practice_content,
-        '面试': generate_sre_practice_content,
+        '成本': generate_sre_practice_content,
+        'rca': generate_sre_practice_content,
+
+        # Phase 12: Capstone
+        'capstone': generate_capstone_content,
+        '综合': generate_capstone_content,
+        '项目': generate_capstone_content,
+
+        # Phase 13: Interview
+        '面试': generate_interview_content,
+        '简历': generate_interview_content,
+        '认证': generate_interview_content,
+        '软技能': generate_interview_content,
+        '职业规划': generate_interview_content,
+        '投资': generate_interview_content,
     }
 
     topic_lower = topic.lower()
