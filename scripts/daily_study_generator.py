@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
 # Import enhanced content generators
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
 from generators_enhanced import (
     generate_go_content, generate_db_content,
     generate_docker_content, generate_k8s_content,

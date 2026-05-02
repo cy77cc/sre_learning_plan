@@ -18,64 +18,223 @@
 
 ## 📖 详细知识点
 
-### 1. 数据结构 — 核心概念
+### 1. Go 切片深入
 
-数据结构 是 SRE 工程师必须掌握的重要技能。
+#### 1.1 切片内部结构
 
-#### 1.1 基础知识
-
-- 理解数据结构的基本原理和架构
-- 掌握常用命令和操作方式
-- 能够在实际工作场景中应用
-
-#### 1.2 SRE 实战场景
-
-在生产环境中，数据结构的应用场景包括：
-- **日常运维**：定期检查和维护
-- **故障排查**：快速定位和解决问题
-- **自动化**：编写脚本实现自动化管理
-
-```bash
-# 基础操作示例
-# 根据数据结构主题执行相关命令
-# 参考官方文档获取详细信息
+切片是一个三字段结构体：
+```go
+type slice struct {
+    array unsafe.Pointer  // 指向底层数组的指针
+    len   int             // 当前长度
+    cap   int             // 容量（从指针位置到数组末尾）
+}
 ```
 
----
+```go
+package main
 
-### 2. 实际操作
+import "fmt"
 
-#### 2.1 基础练习
+func main() {
+    // 创建切片
+    s := []int{1, 2, 3, 4, 5}
+    fmt.Printf("len=%d cap=%d %v\n", len(s), cap(s), s)
 
-```bash
-# 练习 1：基础命令
-# 查阅官方文档，完成基本操作
+    // 切片共享底层数组
+    s2 := s[1:3] // [2, 3]
+    fmt.Printf("s2: len=%d cap=%d %v\n", len(s2), cap(s2), s2)
+
+    // 修改 s2 会影响 s
+    s2[0] = 200
+    fmt.Println(s) // [1, 200, 3, 4, 5]
+
+    // append 可能分配新数组
+    s3 := append(s2, 300, 400, 500, 600)
+    // cap(s2)=4, 追加 4 个元素后超出容量，分配新数组
+    s3[0] = 999
+    fmt.Println(s2) // [999, 3] — s2 和 s3 现在独立
+}
 ```
 
-#### 2.2 进阶练习
+#### 1.2 切片操作性能
 
-```bash
-# 练习 2：结合实际场景
-# 尝试在测试环境中模拟生产问题
+```go
+// 预分配容量（避免反复扩容）
+data := make([]int, 0, 1000) // len=0, cap=1000
+for i := 0; i < 1000; i++ {
+    data = append(data, i)
+}
+
+// 不预分配（会反复分配+拷贝）
+data := []int{}
+for i := 0; i < 1000; i++ {
+    data = append(data, i) // 触发 ~10 次扩容
+}
 ```
 
----
+### 2. Map 深入
 
-### 3. 常见问题
+#### 2.1 Map 原理
 
-| 问题 | 排查思路 |
-|------|---------|
-| 服务无法启动 | 检查日志、端口占用、配置文件 |
-| 性能下降 | 监控资源使用、检查瓶颈 |
-| 连接失败 | 检查网络、防火墙、服务状态 |
+Go 的 map 基于哈希表实现：
+```go
+// 创建
+m := make(map[string]int)
+m["cpu"] = 85
+m["mem"] = 72
 
----
+// 安全访问
+val, exists := m["disk"]
+if !exists {
+    fmt.Println("key not found")
+}
 
-### 4. 扩展阅读
+// 遍历（注意：顺序不保证！）
+for key, val := range m {
+    fmt.Printf("%s: %d\n", key, val)
+}
 
-- 查阅官方文档获取最准确的信息
-- 参考相关技术博客和教程
-- 在测试环境中反复练习
+// 删除
+delete(m, "cpu")
+
+// 嵌套 map
+servers := map[string]map[string]float64{
+    "web-01": {"cpu": 45.2, "mem": 72.1},
+    "db-01":  {"cpu": 88.5, "mem": 91.3},
+}
+```
+
+**Map 注意事项**：
+```
+❌ map 不是并发安全的！
+   多个 goroutine 同时读写会 panic: concurrent map writes
+
+✅ 解决方案：
+   1. sync.Map（读多写少）
+   2. sync.RWMutex + 普通 map（通用）
+   3. channel 传递数据
+```
+
+#### 2.2 sync.Map（并发安全）
+
+```go
+package main
+
+import (
+    "fmt"
+    "sync"
+)
+
+func main() {
+    var m sync.Map
+
+    // 存储
+    m.Store("web-01", map[string]int{"cpu": 45, "mem": 72})
+    m.Store("web-02", map[string]int{"cpu": 38, "mem": 65})
+
+    // 读取
+    val, ok := m.Load("web-01")
+    if ok {
+        fmt.Printf("Found: %v\n", val)
+    }
+
+    // 遍历
+    m.Range(func(key, value interface{}) bool {
+        fmt.Printf("%s: %v\n", key, value)
+        return true
+    })
+
+    // 删除
+    m.Delete("web-02")
+}
+```
+
+### 3. 结构体标签与 JSON 序列化
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+)
+
+type Server struct {
+    ID        int               `json:"id"`
+    Name      string            `json:"name"`
+    IPAddress string            `json:"ip_address"`
+    Port      int               `json:"port,omitempty"`
+    Tags      []string          `json:"tags,omitempty"`
+    Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+func main() {
+    // 结构体 → JSON
+    srv := Server{
+        ID:        1,
+        Name:      "web-01",
+        IPAddress: "10.0.1.10",
+        Tags:      []string{"production", "web"},
+    }
+
+    data, _ := json.MarshalIndent(srv, "", "  ")
+    fmt.Println(string(data))
+    // {
+    //   "id": 1,
+    //   "name": "web-01",
+    //   "ip_address": "10.0.1.10",
+    //   "tags": ["production", "web"]
+    // }
+
+    // JSON → 结构体
+    var parsed Server
+    json.Unmarshal(data, &parsed)
+    fmt.Printf("%+v\n", parsed)
+}
+```
+
+### 4. SRE 实战：用结构体表示监控配置
+
+```go
+type MonitorConfig struct {
+    Interval    time.Duration `json:"interval"`
+    Timeout     time.Duration `json:"timeout"`
+    Retries     int           `json:"retries"`
+    Endpoints   []Endpoint    `json:"endpoints"`
+    AlertRules  []AlertRule   `json:"alert_rules"`
+}
+
+type Endpoint struct {
+    Name    string            `json:"name"`
+    URL     string            `json:"url"`
+    Method  string            `json:"method"`
+    Headers map[string]string `json:"headers,omitempty"`
+    Expect  ExpectConfig      `json:"expect"`
+}
+
+type ExpectConfig struct {
+    StatusCode int    `json:"status_code"`
+    BodyMatch  string `json:"body_match,omitempty"`
+    MaxLatency int    `json:"max_latency_ms"`
+}
+
+type AlertRule struct {
+    Name      string `json:"name"`
+    Condition string `json:"condition"`  // "cpu > 90 for 5m"
+    Severity  string `json:"severity"`   // "critical", "warning"
+    Channel   string `json:"channel"`    // "slack", "pagerduty"
+}
+```
+
+### 5. 常见问题
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| 切片 append 后原数据变了 | 超出容量分配了新数组 | 检查 cap，用 copy 创建独立副本 |
+| map 并发写 panic | 非线程安全 | 用 sync.RWMutex 或 sync.Map |
+| JSON 序列化空字段 | 零值也会被序列化 | 用 `omitempty` 标签 |
+| 结构体比较报错 | 含不可比较字段 | 用 reflect.DeepEqual 或逐字段比较 |
 
 
 ---
@@ -207,5 +366,5 @@ analyze_nginx_log("/var/log/nginx/access.log")
 
 ---
 
-*由 SRE 学习计划自动生成 | 2026-05-02 13:37:20*  
+*由 SRE 学习计划自动生成 | 2026-05-02 15:05:12*  
 *Generated by Hermes Agent with review*
