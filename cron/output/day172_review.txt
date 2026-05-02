@@ -1,6 +1,6 @@
 SRE 学习文档 Review 报告
 ========================
-日期：2026-05-02 14:47:12
+日期：2026-05-02 14:55:20
 Day 172: 理论测试：TTFT vs TPOT、LoRA 原理、vLLM 优化
 
 文档路径：/root/sre_learning/docs/day172-理论测试：TTFTvsTPOT、LoRA原理、vLLM优化.md
