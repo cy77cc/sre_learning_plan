@@ -3175,12 +3175,13 @@ def generate_default_content(day: int, topic: str) -> str:
         'gitlab': generate_cicd_content,
         'jenkins': generate_cicd_content,
         'argocd': generate_cicd_content,
-        '部署': generate_cicd_content,
         'vault': generate_cicd_content,
         '混沌': generate_cicd_content,
         '扫描': generate_cicd_content,
         'gitops': generate_cicd_content,
         '构建': generate_cicd_content,
+        '部署策略': generate_cicd_content,
+        '部署工具': generate_cicd_content,
 
         # Phase 10: LLM Ops
         'llm': generate_llmops_content,
