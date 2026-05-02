@@ -5060,9 +5060,8 @@ def main():
         content, issues = make_day_doc(day, topic)
 
         day_padded = f"{day:02d}"
-        day_dir = DOCS_DIR / f"day{day_padded}"
-        day_dir.mkdir(exist_ok=True)
-        doc_path = day_dir / "README.md"
+        safe_title = topic.replace('/', '_').replace(' ', '')
+        doc_path = DOCS_DIR / f"day{day_padded}-{safe_title}.md"
 
         if args.dry_run:
             print(f"[dry-run] day{day_padded}: {topic} | issues: {issues}")

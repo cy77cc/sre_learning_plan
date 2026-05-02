@@ -3376,12 +3376,10 @@ def main():
     # 生成文档
     content, issues = generate_day_doc(day, topic)
     
-    # 保存文档
+    # 保存文档（扁平格式：dayXX-标题.md）
     day_padded = f"{day:02d}"
-    day_dir = DOCS_DIR / f"day{day_padded}"
-    day_dir.mkdir(parents=True, exist_ok=True)
-    
-    doc_path = day_dir / "README.md"
+    safe_title = topic.replace('/', '_').replace(' ', '')
+    doc_path = DOCS_DIR / f"day{day_padded}-{safe_title}.md"
     doc_path.write_text(content, encoding='utf-8')
     print(f"✅ 文档已生成：{doc_path}")
     
