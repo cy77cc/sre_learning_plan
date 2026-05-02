@@ -1,9 +1,9 @@
 SRE 学习文档 Review 报告
 ========================
-日期：2026-05-02 13:42:16
+日期：2026-05-02 14:45:50
 Day 97: ConfigMap 与 Secret
 
 文档路径：/root/sre_learning/docs/day97-ConfigMap与Secret.md
 
 Review 问题：
-  ✅ 无问题
+  1. ⚠️ 命令示例偏少（当前 1 个，建议至少 5 个）
