@@ -6,7 +6,7 @@
 
 很多团队把安全只理解成“把模型接口加鉴权”，但真正的风险分布在整条链路里：谁能访问模型和知识库，谁能触发工具调用，Prompt 注入是否能绕过边界，PII 是否会流入日志，成本是否能按租户追踪，审计是否能解释一次敏感调用。
 
-本文聚焦运行治理与平台边界；[20-rag-agent-and-application-platform.md](./20-rag-agent-and-application-platform.md) 负责 RAG/Agent 运行链路，[18-inference-observability-and-slo.md](./18-inference-observability-and-slo.md) 负责基础可观测性。
+本文聚焦运行治理与平台边界，负责策略控制、授权机制、数据边界、可审计性与治理约束；[20-rag-agent-and-application-platform.md](./20-rag-agent-and-application-platform.md) 负责 RAG/Agent 的运行时可运维性、检索/生成/工具链行为和状态管理，[18-inference-observability-and-slo.md](./18-inference-observability-and-slo.md) 负责基础可观测性。
 
 ## 系统全景
 
@@ -16,13 +16,13 @@
 用户 / 服务账号 / 租户
         |
         v
-身份层：SSO / API Key / OIDC / RBAC / ABAC
+身份层：SSO / API Key / OpenID Connect（OIDC） / RBAC / 基于属性的访问控制（ABAC）
         |
         v
 控制层：配额 / 限流 / 内容安全 / Prompt Guard / Policy Engine
         |
         v
-执行层：LLM / RAG / Agent Runtime / Tool Calling
+执行层：LLM / RAG / Agent Runtime / 工具调用（Tool Calling）
         |
         +------> 数据资产：文档、向量库、会话状态、日志、训练样本
         |
@@ -42,7 +42,7 @@
 
 - 身份认证：人类用户走 SSO/OIDC，服务调用走短期凭证或工作负载身份。
 - 角色控制：谁能调用生产模型、谁能发布 Prompt、谁能读写向量索引。
-- 属性控制：按租户、数据分类、地域、环境和项目进一步限制访问。
+- 属性控制：按租户、数据分类、地域、环境和项目进一步限制访问，这是 ABAC 常见的落点。
 - 运行时隔离：生产与测试、在线与离线、租户之间的资源和数据边界。
 
 对模型资产还要建立制品可信链。模型权重、量化产物、LoRA 和 Prompt 不应绕过制品仓库直接上线，否则无法保证版本追踪、签名校验和回滚一致性。
@@ -55,10 +55,10 @@ Prompt 注入的本质，是让模型把不可信输入误当成可信控制指�
 
 - 输入分层：区分系统提示、开发者提示、用户输入、检索内容和工具输出。
 - 权限分层：模型即使看到了某段文本，也不代表它有权限执行对应动作。
-- 工具分层：tool calling 必须经过 allowlist、参数校验和最小权限控制。
+- 工具分层：工具调用（tool calling）必须经过 allowlist、参数校验和最小权限控制。
 - 输出分层：对高风险内容、敏感操作建议和外发动作做二次审查。
 
-越权调用通常发生在 agent runtime 里。模型生成的工具参数不能直接视为可信命令，而应经过 policy engine、schema 校验和业务规则检查。否则“模型会不会犯错”就会直接变成“平台会不会误执行”。
+越权调用通常发生在 agent runtime 里。这里的治理重点不是如何调度工具，而是如何保证模型生成的工具参数不能绕过 policy engine、schema 校验和业务规则检查。否则“模型会不会犯错”就会直接变成“平台会不会误执行”。
 
 内容安全不仅针对违规内容生成，也要覆盖外部内容回传。检索到的恶意网页、带毒文档和伪造工具响应，都可能成为攻击面。SRE 角度要知道内容安全策略放在哪一层、失败时是拒绝、替换还是人工审核。
 
@@ -123,7 +123,7 @@ PII 处理要关注采集、传输、存储、日志和导出五个环节。常�
 ## 实践建议
 
 - 为模型、Prompt、LoRA、向量索引和工具权限建立统一制品与变更审计链。
-- 所有 tool calling 默认 deny，显式 allowlist，并做参数级校验和超时限制。
+- 所有 tool calling 默认 deny，显式 allowlist，并做参数级校验和权限边界检查。
 - 对输入、检索内容、工具输出和日志分别做脱敏与风险扫描，不要只扫用户输入。
 - 多租户场景至少做到身份隔离、命名空间隔离、配额隔离和成本归因四件事。
 - 把安全策略命中、人工放行和误杀复盘接入常规运营，而不是只在审计前临时整理。

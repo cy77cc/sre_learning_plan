@@ -2,11 +2,11 @@
 
 ## 这篇文档解决什么问题
 
-这篇文档讨论 AI 应用平台如何把“模型调用”扩展成可运行、可观测、可治理的完整系统。很多团队把 RAG、agent 和 tool calling 当成功能开发问题，但线上真正出故障时，问题往往出在索引更新、embedding 漂移、会话状态、工具超时和上下文膨胀。
+这篇文档讨论 AI 应用平台如何把“模型调用”扩展成可运行、可观测、可治理的完整系统。很多团队把 RAG、agent 和工具调用（tool calling）当成功能开发问题，但线上真正出故障时，问题往往出在索引更新、embedding 漂移、会话状态、工具超时和上下文膨胀。
 
-SRE 和平台团队需要理解，RAG 与 agent 平台并不是一个单点服务，而是一条由离线摄取、在线检索、上下文构造、推理调用、工具执行和会话状态组成的链路。任何一段漂移或超时，都会直接影响回答质量与时延。
+SRE 和平台团队需要理解，RAG 与 agent 平台并不是一个单点服务，而是一条由离线摄取、在线检索、上下文构造、推理调用、工具执行和会话状态（session state）组成的链路。任何一段漂移或超时，都会直接影响回答质量与时延。
 
-本文聚焦应用平台运行面；[18-inference-observability-and-slo.md](./18-inference-observability-and-slo.md) 负责基础推理指标，[19-reliability-scaling-and-multi-region.md](./19-reliability-scaling-and-multi-region.md) 负责高可用与流量治理。
+本文聚焦应用平台运行面，负责运行时可运维性、检索到生成的链路行为、工具链执行表现以及状态管理；[18-inference-observability-and-slo.md](./18-inference-observability-and-slo.md) 负责基础推理指标，[19-reliability-scaling-and-multi-region.md](./19-reliability-scaling-and-multi-region.md) 负责高可用与流量治理，[21-security-compliance-and-governance.md](./21-security-compliance-and-governance.md) 负责围绕这些能力的策略、授权、审计与治理边界。
 
 ## 系统全景
 
@@ -24,7 +24,7 @@ RAG/Agent 平台通常同时包含离线和在线两条链路。离线链路负�
   -> reranker
   -> 上下文拼接
   -> LLM / agent runtime
-  -> tool calling / memory / session state
+  -> 工具调用（tool calling） / memory / session state
   -> 输出与审计
 ```
 
@@ -65,9 +65,9 @@ reranker 的作用是把初次召回的候选结果重新排序，提升真正�
 
 生成链路里最好显式记录 query rewrite、检索命中文档、reranker 得分、最终上下文 token 数和引用来源。没有这些记录时，平台只能看到“模型答错了”，却不知道错在召回、重排还是模板。
 
-## agent runtime、tool calling、memory、session state
+## agent runtime、工具调用（tool calling）、memory、会话状态（session state）
 
-agent runtime 负责把“单次补全请求”扩展成多步执行。它通常包含计划器、工具调度器、状态存储、重试策略和安全边界。SRE 视角要把 agent 当成一个有状态工作流系统，而不是一个普通 API。
+agent runtime 负责把“单次补全请求”扩展成多步执行。它通常包含计划器、工具调度器、状态存储、重试策略和执行边界。SRE 视角要把 agent 当成一个有状态工作流系统，而不是一个普通 API。
 
 tool calling 最大的风险不是功能不可用，而是把外部系统的不稳定性带入主链路。搜索、数据库查询、工单系统、代码仓库、支付接口和内部 API 一旦超时，agent 整体响应时间会迅速失控。因此工具调用必须有超时、并发上限、幂等设计和结果缓存。
 
@@ -121,7 +121,7 @@ RAG/Agent 平台的指标至少应覆盖离线索引、在线检索、生成链�
 
 - 为摄取、索引构建和索引发布分别定义状态机与审计记录，避免“看起来更新了，实际没生效”。
 - embedding 模型、chunk 策略和索引版本要显式绑定，升级时支持双写或双读验证。
-- 对 reranker、tool calling 和 memory 建立独立指标，不要全部折叠进“LLM 延迟”。
+- 对 reranker、tool calling、memory 和 session state 建立独立指标，不要全部折叠进“LLM 延迟”。
 - agent runtime 必须有步骤上限、总时长上限、工具并发上限和人工兜底路径。
 - 线上请求记录最终引用来源、上下文 token 数和工具调用摘要，便于复盘质量问题。
 
