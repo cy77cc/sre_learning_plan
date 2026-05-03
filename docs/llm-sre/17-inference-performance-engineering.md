@@ -34,13 +34,13 @@ Prefill 更像大批量矩阵计算，计算密度高，对输入长度极其敏
 
 这意味着同一个系统可能同时存在两类瓶颈：一类是长上下文让 Prefill 爆炸，另一类是高并发生成把 Decode 拖慢。把它们混在一起看，会导致错误调优，例如用更激进的 batching 去解决本质上的长上下文问题，结果 TTFT 更差。
 
-## KV Cache、paged attention、continuous batching
+## KV Cache、Paged Attention、Continuous Batching
 
 KV Cache 是性能工程的中心对象之一。它决定显存占用、长上下文承载能力和请求复用效率。上下文越长、并发会话越多、输出越慢，KV Cache 压力越大。显存不够时，请求会被拒绝、换出，或者迫使 batch 缩小。
 
-Paged attention 的价值在于把 KV Cache 管理从“大块连续内存”改成“分页管理”，降低碎片和扩容成本。continuous batching 的价值在于让短请求完成后新请求可以尽快补进 batch，提高 GPU 忙碌度，减少静态批处理的空转时间。
+Paged Attention 的价值在于把 KV Cache 管理从“大块连续内存”改成“分页管理”，降低碎片和扩容成本。Continuous Batching 的价值在于让短请求完成后新请求可以尽快补进 batch，提高 GPU 忙碌度，减少静态批处理的空转时间。
 
-这两类技术的工程意义不是“平均吞吐更漂亮”，而是能否在真实混合流量下稳定控制 tail latency。SRE 需要看的是显存利用率、KV Cache 占用、batch 波动、排队长度和超时率是否一起改善。
+这两类技术的工程意义不是“平均吞吐更漂亮”，而是能否在真实混合流量下稳定控制尾延迟。SRE 需要看的是显存利用率、KV Cache 占用、batch 波动、排队长度和超时率是否一起改善。
 
 ## 量化、显存与吞吐
 
@@ -48,11 +48,11 @@ Paged attention 的价值在于把 KV Cache 管理从“大块连续内存”改
 
 不同量化方案的工程代价主要在三点：精度风险、构建与兼容性复杂度、问题排查门槛。平台团队要特别警惕“为了追求更小显存占用而引入多个量化分支”，因为这会直接增加制品管理、回滚和灰度验证成本。
 
-## speculative decoding、PD 分离、prefix cache
+## Speculative Decoding、PD 分离、Prefix Cache
 
-speculative decoding 通过小模型先猜测若干 token，再由大模型验证，以降低 Decode 延迟。它适合输出较长、验证接受率较高的场景；如果接受率低，额外协调成本会抵消收益。PD 分离通常指把 Prefill 与 Decode 拆到不同资源池，分别优化计算密集和带宽敏感阶段，适合请求长度差异大、集群规模较大的平台。
+Speculative Decoding 通过小模型先猜测若干 token，再由大模型验证，以降低 Decode 延迟。它适合输出较长、验证接受率较高的场景；如果接受率低，额外协调成本会抵消收益。PD 分离通常指把 Prefill 与 Decode 拆到不同资源池，分别优化计算密集和带宽敏感阶段，适合请求长度差异大、集群规模较大的平台。
 
-prefix cache 则更适合高重复前缀场景，例如固定 system prompt、模板化检索上下文、热点工作流。它能降低 Prefill 开销，但前提是前缀稳定、命中率可观，而且缓存失效和版本切换语义足够清楚。
+Prefix Cache 则更适合高重复前缀场景，例如固定 system prompt、模板化检索上下文、热点工作流。它能降低 Prefill 开销，但前提是前缀稳定、命中率可观，而且缓存失效和版本切换语义足够清楚。
 
 这三种优化都不是默认项。它们引入了更多状态、更多命中假设和更多回退逻辑，值班团队必须能看见收益，也能在异常时快速关闭。
 
@@ -64,15 +64,18 @@ prefix cache 则更适合高重复前缀场景，例如固定 system prompt、�
 
 ## 关键指标与告警
 
-性能工程需要把优化动作和指标绑定起来。建议至少持续观察：
+本节只讨论性能调优需要拆分观察哪些信号，以便判断瓶颈落在排队、Prefill、Decode 还是缓存复用；完整告警策略与错误预算归 [18-inference-observability-and-slo.md](./18-inference-observability-and-slo.md) 统一讨论。
+
+性能工程需要把优化动作和分段信号绑定起来。建议至少持续观察：
 
 - TTFT、TPOT、TPS（tokens/s）、queue time 的 p50/p95/p99。
 - Prefill token 吞吐与 Decode token 吞吐，避免只看总体吞吐。
 - running requests、waiting requests、batch size、max batched tokens。
 - KV Cache 占用率、碎片趋势、Prefix Cache 命中率、换出次数。
 - 每模型、每租户的输入长度、输出长度与超时率。
+- Speculative Decoding 接受率、PD 分离前后网络与排队开销、LoRA 切换命中情况。
 
-告警设计应服务于性能退化定位，例如“TTFT p95 上升且 waiting requests 增加”“TPOT p95 上升但 queue time 正常”“KV Cache 占用长期接近上限并伴随请求拒绝”。这样才能区分是排队问题、Prefill 问题还是 Decode 问题。
+这里保留“告警”一词，是为了强调这些分段信号要能支持性能退化定位，例如“TTFT p95 上升且 waiting requests 增加”“TPOT p95 上升但 queue time 正常”“KV Cache 占用长期接近上限并伴随请求拒绝”。重点不是完整告警策略，而是能否据此区分排队问题、Prefill 问题和 Decode 问题。
 
 ## 典型故障与排查路径
 
@@ -82,7 +85,7 @@ prefix cache 则更适合高重复前缀场景，例如固定 system prompt、�
 | TPOT 变差且流式输出发抖 | Decode token 吞吐、KV Cache 占用、batch 波动 | 显存带宽吃紧、连续批处理效率下降、长会话挤占共享资源 |
 | TPS（tokens/s）上不去 | GPU 利用率、batch size、请求长度分布 | batch 太小、调度保守、流量过碎、实例池切分过细 |
 | 频繁 OOM 或拒绝请求 | 显存水位、KV Cache 增长、上下文长度配置 | max context 过大、并发过高、量化/分页策略不合理 |
-| 某些优化上线后收益反而变差 | 命中率、接受率、回退率、实例日志 | speculative decoding 接受率低、prefix cache 命中不足、PD 分离带来额外网络与调度开销 |
+| 某些优化上线后收益反而变差 | 命中率、接受率、回退率、实例日志 | Speculative Decoding 接受率低、Prefix Cache 命中不足、PD 分离带来额外网络与调度开销 |
 
 排查顺序建议固定化：先判断慢在排队、Prefill 还是 Decode；再看是全局现象、单模型现象还是单租户现象；最后再落到具体优化开关和实例日志。
 
@@ -90,12 +93,12 @@ prefix cache 则更适合高重复前缀场景，例如固定 system prompt、�
 
 | 优化手段 | 收益 | 代价 | 何时不该用 |
 | --- | --- | --- | --- |
-| continuous batching | 提升 GPU 忙碌度和总体吞吐，改善混合请求利用率 | 调度更复杂，尾延迟分析更难 | 低并发、强隔离、请求长度高度一致时 |
-| paged attention | 降低 KV Cache 碎片，提高显存利用率和长上下文稳定性 | 引擎实现更复杂，排障要理解页级行为 | 负载简单、上下文短、显存并不紧张时 |
+| Continuous Batching | 提升 GPU 忙碌度和总体吞吐，改善混合请求利用率 | 调度更复杂，尾延迟分析更难 | 低并发、强隔离、请求长度高度一致时 |
+| Paged Attention | 降低 KV Cache 碎片，提高显存利用率和长上下文稳定性 | 引擎实现更复杂，排障要理解页级行为 | 负载简单、上下文短、显存并不紧张时 |
 | 量化 | 降低显存占用，提升可承载模型规模或并发 | 精度回归验证、构建链路和兼容性复杂 | 质量风险不可接受、版本切换频繁时 |
-| speculative decoding | 降低 Decode 延迟，改善长输出场景 TPOT | 需要辅助模型与接受率监控，回退逻辑复杂 | 输出很短、接受率低、平台缺乏观测能力时 |
+| Speculative Decoding | 降低 Decode 延迟，改善长输出场景 TPOT | 需要辅助模型与接受率监控，回退逻辑复杂 | 输出很短、接受率低、平台缺乏观测能力时 |
 | PD 分离 | 分别优化 Prefill 与 Decode 资源池，提高大规模平台弹性 | 网络与控制面复杂度上升，请求编排更难 | 集群很小、请求结构单一、团队值班经验不足时 |
-| prefix cache | 降低重复前缀的 Prefill 成本，改善 TTFT | 缓存失效、版本一致性和命中管理复杂 | prompt 高度离散、前缀变化快时 |
+| Prefix Cache | 降低重复前缀的 Prefill 成本，改善 TTFT | 缓存失效、版本一致性和命中管理复杂 | prompt 高度离散、前缀变化快时 |
 
 性能工程没有免费的优化。所有优化都在用复杂度换收益，关键是确认收益是否稳定、可观测、可回退。
 
@@ -103,7 +106,7 @@ prefix cache 则更适合高重复前缀场景，例如固定 system prompt、�
 
 - 先建立分段指标：TTFT、TPOT、queue time、Prefill/Decode token 吞吐必须拆开看。
 - 先优化请求结构，再优化内核参数。无约束的上下文膨胀会吞掉大多数引擎优化收益。
-- 只有在命中率、接受率可测的前提下，才上线 prefix cache 或 speculative decoding。
+- 只有在命中率、接受率可测的前提下，才上线 Prefix Cache 或 Speculative Decoding。
 - 多模型、多 LoRA 平台优先做容量分层和热点预热，再追求极限共享。
 - 把“关闭优化开关后的退路”预先写进运行手册，否则性能优化会变成值班风险。
 
