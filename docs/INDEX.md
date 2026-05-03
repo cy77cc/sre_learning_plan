@@ -173,8 +173,8 @@
 | Day 114 | ✅ | EKS 弹性 Kubernetes | [📄 查看](day114-EKS弹性Kubernetes.md) |
 | Day 115 | ✅ | AWS 安全 | [📄 查看](day115-AWS安全.md) |
 | Day 116 | ✅ | AWS 高可用架构 | [📄 查看](day116-AWS高可用架构.md) |
-| Day 117 | ✅ | AWS SAA 认证知识点梳理 | [📄 查看](day117-备考：AWSSAA认证知识点梳理.md) |
-| Day 118 | ✅ | AWS SAA 认证刷题 | [📄 查看](day118-备考：AWSSAA认证刷题.md) |
+| Day 117 | ✅ | AWS SAA 认证知识点梳理 | [📄 查看](day117-AWS_SAA认证知识点梳理.md) |
+| Day 118 | ✅ | AWS SAA 认证刷题 | [📄 查看](day118-AWS_SAA认证刷题.md) |
 | Day 119 | ✅ | AWS 知识掌握 | [📄 查看](day119-AWS知识掌握.md) |
 | Day 120 | ✅ | Terraform 简介 | [📄 查看](day120-Terraform简介.md) |
 | Day 121 | ✅ | Terraform 基础 | [📄 查看](day121-Terraform基础.md) |
@@ -209,7 +209,7 @@
 | Day 143 | ✅ | Loki 日志系统 | [📄 查看](day143-Loki日志系统.md) |
 | Day 144 | ✅ | 链路追踪 Jaeger | [📄 查看](day144-链路追踪—Jaeger.md) |
 | Day 145 | ✅ | APM 集成 | [📄 查看](day145-APM集成.md) |
-| Day 146 | ✅ | 三大支柱综合 | [📄 查看](day146-可观测性阶段总结：三大支柱.md) |
+| Day 146 | ✅ | 三大支柱综合 | [📄 查看](day146-可观测性阶段总结.md) |
 
 ---
 
@@ -248,8 +248,8 @@
 | Day 168 | ✅ | RAG 架构运维 | [📄 查看](day168-RAG架构运维.md) |
 | Day 169 | ✅ | AI 应用监控 | [📄 查看](day169-AI应用监控.md) |
 | Day 170 | ✅ | 安全与合规 | [📄 查看](day170-安全与合规.md) |
-| Day 171 | ✅ | LLM 服务全链路 | [📄 查看](day171-LLM服务全链路.md) |
-| Day 172 | ✅ | LLM Ops 综合评估 | [📄 查看](day172-LLMOps综合评估.md) |
+| Day 171 | ✅ | LLM 服务全链路 | [📄 查看](day171-实战项目：LLM服务全链路.md) |
+| Day 172 | ✅ | LLM Ops 综合评估 | [📄 查看](day172-理论测试：TTFTvsTPOT、LoRA原理、vLLM优化.md) |
 
 ### 专题延伸：LLM SRE
 
