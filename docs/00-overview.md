@@ -1245,6 +1245,10 @@
 - [ ] **实操测试**：部署模型服务 + 编写监控
 - [ ] **自我评估**：能否独立运维生产级 LLM 服务？
 
+### 专题延伸：LLM SRE
+
+在完成 Day 161-172 后，可以继续阅读 [docs/llm-sre/README.md](llm-sre/README.md)，进入面向平台与运维视角的专题目录。建议先看 [docs/llm-sre/10-llm-lifecycle-overview.md](llm-sre/10-llm-lifecycle-overview.md) 建立训练到推理的全生命周期框架，再结合 [docs/llm-sre/31-incident-runbook.md](llm-sre/31-incident-runbook.md) 理解故障响应与运行保障实践。
+
 
 ## Week 23：SRE 核心实践
 

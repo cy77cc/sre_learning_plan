@@ -251,6 +251,18 @@
 | Day 171 | ✅ | LLM 服务全链路 | [📄 查看](day171-LLM服务全链路.md) |
 | Day 172 | ✅ | LLM Ops 综合评估 | [📄 查看](day172-LLMOps综合评估.md) |
 
+### 专题延伸：LLM SRE
+
+| 主题 | 说明 | 文档链接 |
+|------|------|---------|
+| 专题导读 | 了解专题范围与学习顺序 | [📄 查看](llm-sre/README.md) |
+| 学习路线图 | 按模块安排平台与运维方向学习 | [📄 查看](llm-sre/01-roadmap.md) |
+| 术语表 | 快速统一 LLM SRE 常用概念 | [📄 查看](llm-sre/02-glossary.md) |
+| 生命周期总览 | 从训练到推理的全链路视角 | [📄 查看](llm-sre/10-llm-lifecycle-overview.md) |
+| 训练基础设施 | GPU 集群与训练平台关键主题 | [📄 查看](llm-sre/12-training-infrastructure-and-gpu-clusters.md) |
+| 推理服务架构 | 推理引擎与服务编排重点 | [📄 查看](llm-sre/16-inference-engines-and-serving-architecture.md) |
+| 事故 Runbook | 面向故障响应的操作手册示例 | [📄 查看](llm-sre/31-incident-runbook.md) |
+
 ---
 
 ## 🎯 第十二阶段：SRE 核心实战（第 23 周）
