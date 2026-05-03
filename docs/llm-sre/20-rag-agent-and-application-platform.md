@@ -65,13 +65,15 @@ reranker 的作用是把初次召回的候选结果重新排序，提升真正�
 
 生成链路里最好显式记录 query rewrite、检索命中文档、reranker 得分、最终上下文 token 数和引用来源。没有这些记录时，平台只能看到“模型答错了”，却不知道错在召回、重排还是模板。
 
-## agent runtime、工具调用（tool calling）、memory、会话状态（session state）
+## agent runtime、tool calling、memory、session state
 
-agent runtime 负责把“单次补全请求”扩展成多步执行。它通常包含计划器、工具调度器、状态存储、重试策略和执行边界。SRE 视角要把 agent 当成一个有状态工作流系统，而不是一个普通 API。
+这一节讨论四个彼此强相关的运行时概念：Agent 运行时（agent runtime）、工具调用（tool calling）、记忆（memory）和会话状态（session state）。后文分别简称为 agent runtime、工具调用、memory 和会话状态。
 
-tool calling 最大的风险不是功能不可用，而是把外部系统的不稳定性带入主链路。搜索、数据库查询、工单系统、代码仓库、支付接口和内部 API 一旦超时，agent 整体响应时间会迅速失控。因此工具调用必须有超时、并发上限、幂等设计和结果缓存。
+agent runtime 负责把“单次补全请求”扩展成多步执行。它通常包含计划器、工具调度器、状态存储、重试策略和执行边界。SRE 视角要把 agent runtime 当成一个有状态工作流系统，而不是一个普通 API。
 
-memory 与 session state 决定 agent 是否能持续完成多轮任务。短期 memory 常放在 Redis 或会话存储中，长期 memory 可能落在向量库、文档库或业务数据库里。这里要重点防止两类问题：会话状态膨胀导致上下文失控，以及状态不一致导致 agent 重复执行或误执行。
+工具调用最大的风险不是功能不可用，而是把外部系统的不稳定性带入主链路。搜索、数据库查询、工单系统、代码仓库、支付接口和内部 API 一旦超时，agent 整体响应时间会迅速失控。因此工具调用必须有超时、并发上限、幂等设计和结果缓存。
+
+memory 与会话状态决定 agent 是否能持续完成多轮任务。短期 memory 常放在 Redis 或会话存储中，长期 memory 可能落在向量库、文档库或业务数据库里。这里要重点防止两类问题：会话状态膨胀导致上下文失控，以及状态不一致导致 agent 重复执行或误执行。
 
 平台上最好明确区分：
 
