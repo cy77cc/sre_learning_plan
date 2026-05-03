@@ -9,6 +9,8 @@
 | TPOT | Time Per Output Token | 平均每个输出 token 的生成时间 | 看 Decode 效率、带宽瓶颈与吞吐稳定性 |
 | QPS | Queries Per Second | 每秒请求数 | 结合并发、排队和限流判断入口压力 |
 | TPS | Tokens Per Second | 每秒处理或生成的 token 数 | 比单纯 QPS 更能反映推理负载强度 |
+| Queue Time | 请求排队时间 | 请求在真正开始执行前的等待时间 | 用于区分容量不足、冷启动和模型本身变慢 |
+| Waiting Requests | 等待请求数 | 当前还未被实例接住的请求数量 | 反映扩容是否跟得上流量与调度压力 |
 | P50/P95/P99 | 延迟分位数 | 延迟分布的统计切面 | P99 常用于发现尾延迟和抖动问题 |
 | KV Cache | Key/Value Cache | 保存历史 token 的注意力缓存 | 直接影响显存占用、长上下文能力和复用效率 |
 | Prefix Cache | 前缀缓存 | 复用相同提示前缀的计算结果 | 看命中率、失效率和跨请求复用收益 |
@@ -28,11 +30,17 @@
 | RAG | Retrieval-Augmented Generation | 检索增强生成 | 运维上要盯检索延迟、召回质量和上下文膨胀 |
 | Embedding | 向量化表示 | 把文本映射为向量以便检索 | 关注模型版本一致性和向量重建成本 |
 | Re-ranker | 重排模型 | 对召回结果再次排序 | 常是额外延迟来源，要评估收益是否值得 |
+| Tool Calling | 工具调用 | 让模型触发外部 API、函数或系统动作 | 关注超时、幂等、权限边界和失败回退 |
+| Session State | 会话状态 | 多轮对话或 agent 执行中的上下文状态 | 关注状态膨胀、一致性和跨租户隔离 |
 | MIG | Multi-Instance GPU | 将单卡切成多个隔离实例 | 关注资源切分粒度、隔离性与利用率损失 |
 | MPS | Multi-Process Service | GPU 多进程共享机制 | 适合轻量共享，但要防止相互干扰 |
 | HPA | Horizontal Pod Autoscaler | 横向扩缩容 | 指标选错会导致扩容滞后或抖动放大 |
+| Shadow Traffic | 影子流量 | 把真实请求复制到新模型或新链路做只读验证 | 适合验证新版本，但不能污染主链路容量与成本统计 |
 | Warmup | 预热 | 提前加载模型和运行关键路径 | 直接影响冷启动、首包延迟和发布稳定性 |
 | Quantization | 量化 | 用更低精度表示权重或激活 | 降低显存和成本，但要验证质量损失 |
 | Speculative Decoding | 投机解码 | 用小模型辅助加速生成 | 关注接受率、额外开销与收益边界 |
+| Fallback | 回退 | 主路径异常时切到备用模型、备用链路或降级模式 | 必须同时评估可用性收益、质量损失和成本变化 |
 | SLO | Service Level Objective | 服务目标阈值 | 需要用延迟、错误率、可用性和成本共同定义 |
 | Error Budget | 错误预算 | 在 SLO 下允许消耗的失败空间 | 用于约束上线节奏、实验强度与稳定性风险 |
+| OIDC | OpenID Connect | 基于身份提供方的现代认证协议 | 常用于统一人类用户与服务身份接入 |
+| ABAC | Attribute-Based Access Control | 基于属性的访问控制 | 适合按租户、环境、数据分类和地域做细粒度授权 |
