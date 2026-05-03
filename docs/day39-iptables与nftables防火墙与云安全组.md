@@ -1,156 +1,212 @@
-# SRE 学习计划 — Day 39：iptables/nftables 防火墙 + 云安全组
+# Day 39: iptables/nftables 防火墙 + 云安全组
+
+> 📅 日期：2026-05-02
+> 📖 学习主题：iptables/nftables 防火墙 + 云安全组 + fail2ban
+> ⏰ 预计学习时间：3-4 小时
+> 📋 前置知识：Day 30 TCP 协议、Day 32 IP 协议、Day 38 tcpdump
+
+## 🎯 学习目标
+
+- 理解 Linux 防火墙架构（Netfilter 框架、Hook 点、表/链/规则）
+- 掌握 iptables 四表五链的完整概念和常用规则配置
+- 理解 NAT（SNAT/DNAT/MASQUERADE）和连接追踪（conntrack）
+- 掌握 nftables 的语法和从 iptables 迁移的策略
+- 能配置云安全组和 fail2ban 实现自动化安全防护
 
 ---
 
-## 📅 基本信息
+## 📖 核心知识点
 
-| 项目 | 内容 |
-|------|------|
-| **天数** | Day 39 |
-| **主题** | iptables/nftables 防火墙 + 云安全组 |
-| **难度** | ⭐⭐⭐ 中级 |
-| **预计时间** | 2-3 小时 |
-| **前置知识** | Linux 网络基础、TCP/IP 协议、Day 38 tcpdump 基础 |
+### 1. Linux 防火墙架构 — Netfilter 框架
 
----
+#### 1.1 Netfilter 是什么
 
-## 📖 目录
-
-1. [iptables 基础](#1-iptables-基础)
-2. [iptables 表与链结构](#2-iptables-表与链结构)
-3. [nftables — iptables 的后继者](#3-nftables--iptables-的后继者)
-4. [云安全组](#4-云安全组)
-5. [SRE 实战案例：fail2ban + iptables 自动封禁](#5-sre-实战案例fail2ban--iptables-自动封禁)
-6. [练习](#6-练习)
-7. [扩展：端口转发 + fail2ban 安装配置](#7-扩展端口转发--fail2ban-安装配置)
-8. [资源](#8-资源)
-
----
-
-## 1. iptables 基础
-
-### 1.1 什么是 iptables？
-
-iptables 是 Linux 内核中 **netfilter** 框架的用户空间管理工具，用于配置 IPv4 数据包过滤规则。它是 Linux 系统上最经典的防火墙工具。
+Netfilter 是 Linux 内核中的数据包过滤框架，工作在内核网络协议栈的多个关键位置。iptables 和 nftables 都是 Netfilter 的用户空间管理工具。
 
 ```
-+----------------------------------------------+
-|              用户空间 (User Space)             |
-|                                              |
-|   ┌─────────────────────────────────────┐     |
-|   │        iptables (命令行工具)         │     |
-|   └──────────────────┬──────────────────┘     |
-|                      │                        |
-|                      ▼                        |
-|              netfilter API                    |
-+----------------------------------------------+
-|              内核空间 (Kernel Space)           |
-|                                              |
-|   ┌─────────────────────────────────────┐     |
-|   │         netfilter 框架               │     |
-|   │   ┌─────────┐ ┌───────┐ ┌────────┐  │     |
-|   │   │  Filter  │ │  NAT  │ │ Mangle │  │     |
-|   │   └─────────┘ └───────┘ └────────┘  │     |
-|   └─────────────────────────────────────┘     |
-|                      │                        |
-|                      ▼                        |
-|            IP 协议栈处理流程                    |
-+----------------------------------------------+
+┌─────────────────────────────────────────────────────────────────────┐
+│                          用户空间 (User Space)                       │
+│                                                                     │
+│   ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
+│   │   iptables   │    │   nftables   │    │     firewalld        │  │
+│   │   (传统工具)  │    │   (新工具)   │    │   (高级前端)         │  │
+│   └──────┬───────┘    └──────┬───────┘    └──────────┬───────────┘  │
+│          │                   │                       │              │
+├──────────┼───────────────────┼───────────────────────┼──────────────┤
+│          │    内核空间        │                       │              │
+│          ▼                   ▼                       ▼              │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │                    Netfilter 框架                            │   │
+│   │                                                             │   │
+│   │   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐      │   │
+│   │   │  raw    │  │ mangle  │  │  nat    │  │ filter  │      │   │
+│   │   │ (表)    │  │ (表)    │  │ (表)    │  │ (表)    │      │   │
+│   │   └─────────┘  └─────────┘  └─────────┘  └─────────┘      │   │
+│   │                                                             │   │
+│   │   ┌──────────────────────────────────────────────────────┐  │   │
+│   │   │              5 个 Hook 点                            │  │   │
+│   │   │  NF_INET_PRE_ROUTING                                │  │   │
+│   │   │  NF_INET_LOCAL_IN                                   │  │   │
+│   │   │  NF_INET_FORWARD                                    │  │   │
+│   │   │  NF_INET_LOCAL_OUT                                  │  │   │
+│   │   │  NF_INET_POST_ROUTING                               │  │   │
+│   │   └──────────────────────────────────────────────────────┘  │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│                              ▼                                      │
+│                     IP 协议栈正常处理                                 │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 安装与检查
+#### 1.2 Netfilter 的 5 个 Hook 点
+
+Netfilter 在内核网络协议栈中定义了 5 个 Hook 点（挂载点），数据包经过这些点时会触发注册的回调函数：
+
+| Hook 点 | 内核常量 | 触发时机 |
+|---------|----------|----------|
+| PREROUTING | NF_INET_PRE_ROUTING | 数据包到达后，路由判断前 |
+| INPUT | NF_INET_LOCAL_IN | 目标为本机的数据包，路由判断后 |
+| FORWARD | NF_INET_FORWARD | 经过本机转发的数据包 |
+| OUTPUT | NF_INET_LOCAL_OUT | 本机产生的数据包 |
+| POSTROUTING | NF_INET_POST_ROUTING | 数据包离开前，路由判断后 |
+
+#### 1.3 数据包完整流经路径
+
+```
+                        ┌──────────────────────────┐
+                        │      外部网络数据包       │
+                        └─────────────┬────────────┘
+                                      │
+                                      ▼
+                            ┌───────────────────┐
+                            │    PREROUTING     │  raw → mangle → nat (DNAT)
+                            └─────────┬─────────┘
+                                      │
+                            ┌─────────┴─────────┐
+                            │    路由决策        │
+                            │  目标IP是本机？    │
+                            └───┬───────────┬───┘
+                                │           │
+                          是 → INPUT    否 → FORWARD
+                                │           │
+                          mangle → filter   mangle → filter
+                                │           │
+                                ▼           ▼
+                          ┌──────────┐  ┌──────────────┐
+                          │ 本地进程 │  │ POSTROUTING  │
+                          └────┬─────┘  │ mangle → nat │
+                               │        │   (SNAT/MASQ) │
+                               ▼        └───────┬──────┘
+                          ┌──────────┐          │
+                          │  OUTPUT  │          ▼
+                          │ raw→mangle│    ┌──────────┐
+                          │ →nat→filter│   │ 发送到   │
+                          └────┬─────┘   │ 外部网络  │
+                               │         └──────────┘
+                               ▼
+                        ┌──────────────┐
+                        │ POSTROUTING  │  mangle → nat (SNAT/MASQUERADE)
+                        └──────┬───────┘
+                               │
+                               ▼
+                        ┌──────────────┐
+                        │   发送到      │
+                        │   外部网络    │
+                        └──────────────┘
+```
+
+**SRE 关键理解**：
+- PREROUTING 是数据包进入后的第一个检查点
+- 路由决策决定数据包走 INPUT（本机处理）还是 FORWARD（转发）
+- POSTROUTING 是数据包离开前的最后一个检查点
+- DNAT 在 PREROUTING 阶段执行（修改目标地址）
+- SNAT/MASQUERADE 在 POSTROUTING 阶段执行（修改源地址）
+
+---
+
+### 2. iptables 深入
+
+#### 2.1 四表详解
+
+iptables 有四张表，每张表负责不同的功能，优先级从高到低为：raw → mangle → nat → filter
+
+| 表名 | 优先级 | 功能 | 内核模块 |
+|------|--------|------|----------|
+| **raw** | 最高 | 连接追踪之前处理，可跳过 conntrack | iptable_raw |
+| **mangle** | 高 | 修改数据包头部（TTL、TOS、MARK） | iptable_mangle |
+| **nat** | 中 | 网络地址转换（SNAT、DNAT、MASQUERADE） | iptable_nat |
+| **filter** | 低 | 数据包过滤（默认表） | iptable_filter |
+
+**raw 表**：
 
 ```bash
-# 检查 iptables 是否已安装
-which iptables
-iptables --version
+# raw 表用于在连接追踪之前处理数据包
+# 主要用途：跳过连接追踪（NOTRACK），提高性能
 
-# Debian/Ubuntu 安装
-sudo apt-get update && sudo apt-get install -y iptables
-
-# RHEL/CentOS/Rocky 安装
-sudo yum install -y iptables iptables-services
-
-# 查看当前规则
-sudo iptables -L -n -v
-
-# 查看规则（带行号）
-sudo iptables -L -n -v --line-numbers
+# 对特定流量禁用连接追踪（适合高并发场景）
+sudo iptables -t raw -A PREROUTING -p tcp --dport 80 -j NOTRACK
+sudo iptables -t raw -A OUTPUT -p tcp --sport 80 -j NOTRACK
 ```
 
----
+**mangle 表**：
 
-## 2. iptables 表与链结构
+```bash
+# mangle 表用于修改数据包的头部字段
 
-### 2.1 四表五链架构
+# 修改 TTL（隐藏跳数）
+sudo iptables -t mangle -A PREROUTING -i eth0 -j TTL --ttl-set 64
 
-**iptables 有四张表，每张表负责不同功能**：
+# 设置 DSCP 标记（QoS）
+sudo iptables -t mangle -A FORWARD -p tcp --dport 443 -j DSCP --set-dscp 46
 
-| 表名 | 功能 | 常用场景 |
-|------|------|----------|
-| **filter** | 数据包过滤（默认表） | 允许/拒绝流量 |
-| **nat** | 网络地址转换 | 端口转发、SNAT/MASQUERADE |
-| **mangle** | 修改数据包内容 | 修改 TTL、TOS 标记 |
-| **raw** | 连接追踪之前处理 | 禁用连接追踪（NOTRACK） |
-
-**五条链定义数据包经过的不同阶段**：
-
-| 链名 | 触发时机 | 可用表 |
-|------|----------|--------|
-| **PREROUTING** | 数据包到达后，路由判断前 | raw, mangle, nat |
-| **INPUT** | 目标为本机的数据包 | mangle, filter |
-| **FORWARD** | 经过本机转发的数据包 | mangle, filter |
-| **OUTPUT** | 本机发出的数据包 | raw, mangle, nat, filter |
-| **POSTROUTING** | 数据包离开前 | mangle, nat |
-
-### 2.2 数据包流向图
-
-```
-                ┌─────────────────────────────────┐
-                │        外部网络数据包            │
-                └────────────────┬────────────────┘
-                                 │
-                                 ▼
-                         ┌───────────────┐
-                         │  PREROUTING   │  ← raw, mangle, nat
-                         └───────┬───────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    │      路由决策            │
-                    │  (目标IP 是本机吗？)      │
-                    └──────┬──────────┬───────┘
-                           │          │
-                     是 → 本机    否 → 转发
-                           │          │
-                           ▼          ▼
-                  ┌─────────────┐  ┌──────────┐
-                  │   INPUT     │  │ FORWARD  │  ← mangle, filter
-                  └──────┬──────┘  └────┬─────┘
-                         │              │
-                         ▼              ▼
-                  ┌─────────────┐  ┌──────────┐
-                  │  本地进程    │  │POSTROUTING│ ← mangle, nat
-                  └──────┬──────┘  └────┬─────┘
-                         │              │
-                         ▼              │
-                  ┌─────────────┐       │
-                  │   OUTPUT    │       │  ← raw, mangle, nat, filter
-                  └──────┬──────┘       │
-                         │              │
-                         └──────┬───────┘
-                                │
-                                ▼
-                         ┌──────────────┐
-                         │ POSTROUTING  │  ← mangle, nat
-                         └──────┬───────┘
-                                │
-                                ▼
-                         ┌──────────────┐
-                         │   发送到外部   │
-                         └──────────────┘
+# MARK 标记（配合策略路由）
+sudo iptables -t mangle -A PREROUTING -s 10.0.1.0/24 -j MARK --set-mark 1
 ```
 
-### 2.3 基本命令语法
+**nat 表**：
+
+```bash
+# nat 表用于网络地址转换
+
+# DNAT：将外部 8080 端口转发到内部 10.0.1.50:80
+sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.0.1.50:80
+
+# SNAT：将内网流量的源地址改为公网 IP
+sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -o eth0 -j SNAT --to-source 203.0.113.1
+
+# MASQUERADE：动态 SNAT（适用于动态 IP，如拨号上网）
+sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -o eth0 -j MASQUERADE
+
+# 本机端口重定向
+sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080
+```
+
+**filter 表**（默认表）：
+
+```bash
+# filter 表用于数据包过滤，是最常用的表
+
+# 允许 HTTP/HTTPS
+sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+
+# 拒绝其他所有入站
+sudo iptables -P INPUT DROP
+```
+
+#### 2.2 五链详解
+
+| 链名 | 触发时机 | 可用表 | 常见用途 |
+|------|----------|--------|----------|
+| **PREROUTING** | 数据包到达后，路由判断前 | raw, mangle, nat | DNAT、端口转发、标记 |
+| **INPUT** | 目标为本机的数据包 | mangle, filter | 入站过滤 |
+| **FORWARD** | 经过本机转发的数据包 | mangle, filter | 转发过滤 |
+| **OUTPUT** | 本机产生的数据包 | raw, mangle, nat, filter | 出站过滤 |
+| **POSTROUTING** | 数据包离开前 | mangle, nat | SNAT、MASQUERADE |
+
+#### 2.3 规则匹配详解
+
+**基本语法**：
 
 ```bash
 iptables [-t 表名] 操作 链名 [匹配条件] [-j 动作]
@@ -160,43 +216,139 @@ iptables [-t 表名] 操作 链名 [匹配条件] [-j 动作]
 
 | 操作 | 参数 | 说明 |
 |------|------|------|
-| 查看 | `-L` | 列出规则 |
 | 追加 | `-A` | 在链尾追加规则 |
-| 插入 | `-I` | 在指定位置插入规则 |
-| 删除 | `-D` | 删除规则 |
-| 替换 | `-R` | 替换规则 |
+| 插入 | `-I [位置]` | 在指定位置插入规则（默认第 1 行） |
+| 删除 | `-D` | 删除规则（按内容或行号） |
+| 替换 | `-R` | 替换指定位置的规则 |
 | 清空 | `-F` | 清空链中所有规则 |
+| 列出 | `-L` | 列出规则 |
 | 设置策略 | `-P` | 设置链的默认策略 |
+| 新建链 | `-N` | 创建自定义链 |
+| 删除链 | `-X` | 删除自定义链 |
 
-**常用匹配条件**：
+**匹配条件详解**：
 
-| 条件 | 参数 | 说明 |
-|------|------|------|
-| 源 IP | `-s <IP/CIDR>` | 匹配源地址 |
-| 目标 IP | `-d <IP/CIDR>` | 匹配目标地址 |
-| 协议 | `-p <协议>` | tcp, udp, icmp, all |
-| 源端口 | `--sport <port>` | 匹配源端口 |
-| 目标端口 | `--dport <port>` | 匹配目标端口 |
-| 网卡入 | `-i <interface>` | 匹配进入的网卡 |
-| 网卡出 | `-o <interface>` | 匹配发出的网卡 |
-| 连接状态 | `-m state --state` | NEW, ESTABLISHED, RELATED, INVALID |
-| 连接状态(新) | `-m conntrack --ctstate` | 推荐使用，替代 state |
+| 条件 | 参数 | 说明 | 示例 |
+|------|------|------|------|
+| 源 IP | `-s` | 匹配源地址 | `-s 10.0.1.100` |
+| 目标 IP | `-d` | 匹配目标地址 | `-d 10.0.1.50` |
+| 协议 | `-p` | 匹配协议 | `-p tcp` / `-p udp` / `-p icmp` |
+| 源端口 | `--sport` | 匹配源端口 | `--sport 12345` |
+| 目标端口 | `--dport` | 匹配目标端口 | `--dport 80` |
+| 多端口 | `--dports` | 匹配多个端口 | `-m multiport --dports 80,443` |
+| 入站网卡 | `-i` | 匹配进入的网卡 | `-i eth0` |
+| 出站网卡 | `-o` | 匹配发出的网卡 | `-o eth0` |
+| 连接状态 | `-m conntrack --ctstate` | 匹配连接状态 | `ESTABLISHED,RELATED` |
+| 速率限制 | `-m limit` | 限速 | `--limit 100/sec` |
+| 连接数限制 | `-m connlimit` | 限制并发连接 | `--connlimit-above 50` |
+| 字符串匹配 | `-m string` | 匹配数据包内容 | `--string "GET" --algo bm` |
+| 时间匹配 | `-m time` | 按时间匹配 | `--timestart 08:00 --timestop 18:00` |
+| IP 范围 | `-m iprange` | 匹配 IP 范围 | `--src-range 10.0.1.1-10.0.1.100` |
+| TTL | `-m ttl` | 匹配 TTL 值 | `--ttl-eq 64` |
+| MAC 地址 | `-m mac` | 匹配 MAC 地址 | `--mac-source aa:bb:cc:dd:ee:ff` |
 
-**常用动作 (Target)**：
+**动作（Target）详解**：
 
 | 动作 | 参数 | 说明 |
 |------|------|------|
 | 接受 | `-j ACCEPT` | 允许数据包通过 |
-| 拒绝 | `-j DROP` | 静默丢弃（不回复） |
-| 拒绝并回复 | `-j REJECT` | 拒绝并返回错误信息 |
+| 丢弃 | `-j DROP` | 静默丢弃（不回复） |
+| 拒绝 | `-j REJECT` | 拒绝并返回错误信息 |
 | 记录日志 | `-j LOG` | 记录到 syslog |
 | 跳转 | `-j <自定义链>` | 跳转到自定义链 |
-| 返回 | `-j RETURN` | 从自定义链返回 |
+| 返回 | `-j RETURN` | 从自定义链返回主链 |
+| SNAT | `-j SNAT` | 源地址转换 |
+| DNAT | `-j DNAT` | 目标地址转换 |
+| MASQUERADE | `-j MASQUERADE` | 动态源地址转换 |
+| REDIRECT | `-j REDIRECT` | 端口重定向 |
+| MARK | `-j MARK` | 设置标记 |
 
-### 2.4 常用规则示例
+#### 2.4 连接追踪（conntrack）
+
+conntrack 是 Netfilter 的连接追踪模块，是状态防火墙和 NAT 的基础。
 
 ```bash
-# ===== 基本规则 =====
+# 查看连接追踪表
+sudo conntrack -L
+
+# 查看连接追踪统计
+sudo conntrack -S
+
+# 查看最大连接追踪数
+sudo sysctl net.netfilter.nf_conntrack_max
+
+# 调整最大连接追踪数（高并发场景）
+sudo sysctl -w net.netfilter.nf_conntrack_max=1000000
+
+# 查看当前连接追踪数量
+sudo cat /proc/sys/net/netfilter/nf_conntrack_count
+
+# 查看连接追踪超时时间
+sudo sysctl net.netfilter.nf_conntrack_tcp_timeout_established
+sudo sysctl net.netfilter.nf_conntrack_tcp_timeout_time_wait
+
+# 调整超时（减少 TIME_WAIT 占用）
+sudo sysctl -w net.netfilter.nf_conntrack_tcp_timeout_time_wait=30
+
+# 清空连接追踪表（谨慎使用）
+sudo conntrack -F
+```
+
+**连接状态说明**：
+
+| 状态 | 说明 | 示例 |
+|------|------|------|
+| NEW | 新建连接 | SYN 包 |
+| ESTABLISHED | 已建立的连接 | 数据传输中 |
+| RELATED | 相关连接 | FTP 数据连接、ICMP 错误 |
+| INVALID | 无效数据包 | 无法识别的包 |
+| UNTRACKED | 未追踪 | 被 NOTRACK 标记的包 |
+
+```bash
+# 基于状态的防火墙规则（推荐）
+sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
+sudo iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -j ACCEPT
+```
+
+#### 2.5 NAT 配置详解
+
+**SNAT（源地址转换）**：
+
+```bash
+# 场景：内网服务器访问外网时，将源地址改为公网 IP
+# 前提：启用 IP 转发
+sudo sysctl -w net.ipv4.ip_forward=1
+
+# SNAT（固定公网 IP）
+sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -o eth0 -j SNAT --to-source 203.0.113.1
+
+# MASQUERADE（动态公网 IP，如 DHCP/拨号）
+sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/8 -o eth0 -j MASQUERADE
+```
+
+**DNAT（目标地址转换）**：
+
+```bash
+# 场景：将外部请求转发到内部服务器
+# 端口转发：外部 8080 → 内部 10.0.1.50:80
+sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.0.1.50:80
+
+# 同时需要允许 FORWARD
+sudo iptables -A FORWARD -p tcp -d 10.0.1.50 --dport 80 -j ACCEPT
+
+# 完整的端口转发配置
+sudo sysctl -w net.ipv4.ip_forward=1
+sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.0.1.50:80
+sudo iptables -t nat -A POSTROUTING -p tcp -d 10.0.1.50 --dport 80 -j MASQUERADE
+sudo iptables -A FORWARD -p tcp -d 10.0.1.50 --dport 80 -j ACCEPT
+sudo iptables -A FORWARD -p tcp -s 10.0.1.50 --sport 80 -j ACCEPT
+```
+
+#### 2.6 常用规则示例
+
+```bash
+# ===== 基础安全规则 =====
 
 # 允许已建立的连接（重要！避免把自己锁在外面）
 sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
@@ -211,70 +363,88 @@ sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
-# 允许特定 IP 访问
-sudo iptables -A INPUT -s 192.168.1.100 -j ACCEPT
+# 允许 ICMP（限速防 Ping Flood）
+sudo iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s --limit-burst 4 -j ACCEPT
 
-# 拒绝特定 IP
-sudo iptables -A INPUT -s 10.99.99.99 -j DROP
+# 拒绝特定 IP 段
+sudo iptables -A INPUT -s 10.99.99.0/24 -j DROP
 
-# 允许 ICMP（ping）
-sudo iptables -A INPUT -p icmp --icmp-type echo-request -j ACCEPT
+# 限速：限制 SSH 连接速率（防暴力破解）
+sudo iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
+sudo iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 4 --name SSH -j DROP
 
-# 设置默认策略为 DROP（白名单模式）
+# 记录被拒绝的包
+sudo iptables -A INPUT -m limit --limit 5/min -j LOG --log-prefix "iptables-drop: " --log-level 4
+
+# 设置默认策略
 sudo iptables -P INPUT DROP
 sudo iptables -P FORWARD DROP
-sudo iptables -P OUTPUT ACCEPT  # 通常允许出站
+sudo iptables -P OUTPUT ACCEPT
 
-# ===== 保存与恢复 =====
+# ===== 高级规则 =====
 
-# Debian/Ubuntu 保存规则
+# 防 SYN Flood
+sudo iptables -A INPUT -p tcp --syn -m limit --limit 1/s --limit-burst 3 -j ACCEPT
+sudo iptables -A INPUT -p tcp --syn -j DROP
+
+# 防端口扫描
+sudo iptables -A INPUT -p tcp --tcp-flags ALL NONE -j DROP
+sudo iptables -A INPUT -p tcp --tcp-flags ALL ALL -j DROP
+sudo iptables -A INPUT -p tcp --tcp-flags ALL FIN,URG,PSH -j DROP
+sudo iptables -A INPUT -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP
+
+# 限制并发连接数
+sudo iptables -A INPUT -p tcp --dport 80 -m connlimit --connlimit-above 50 -j REJECT
+```
+
+#### 2.7 规则保存与恢复
+
+```bash
+# ===== Debian/Ubuntu =====
+# 安装持久化工具
+sudo apt-get install -y iptables-persistent
+
+# 保存规则
 sudo iptables-save > /etc/iptables/rules.v4
-
-# RHEL/CentOS 保存规则
-sudo service iptables save
-# 或
-sudo /usr/libexec/iptables/iptables.init save
+sudo ip6tables-save > /etc/iptables/rules.v6
 
 # 恢复规则
 sudo iptables-restore < /etc/iptables/rules.v4
 
-# ===== 规则管理 =====
+# 开机自动加载
+sudo systemctl enable netfilter-persistent
 
-# 查看规则（带行号）
-sudo iptables -L INPUT -n -v --line-numbers
+# ===== RHEL/CentOS/Rocky =====
+# 保存规则
+sudo service iptables save
+# 或
+sudo iptables-save > /etc/sysconfig/iptables
 
-# 按行号删除规则
-sudo iptables -D INPUT 3
+# 恢复规则
+sudo iptables-restore < /etc/sysconfig/iptables
 
-# 删除某条具体规则
-sudo iptables -D INPUT -p tcp --dport 8080 -j ACCEPT
-
-# 清空所有规则（谨慎使用！）
-sudo iptables -F
-
-# 插入规则到第一行（优先级最高）
-sudo iptables -I INPUT 1 -p tcp --dport 22 -s 192.168.1.0/24 -j ACCEPT
+# 开机自动加载
+sudo systemctl enable iptables
 ```
 
-### 2.5 iptables 规则示例输出解读
+#### 2.8 iptables 规则输出解读
 
 ```bash
-$ sudo iptables -L -n -v
+$ sudo iptables -L INPUT -n -v --line-numbers
 Chain INPUT (policy DROP)
-pkts bytes target     prot opt in     out     source               destination
- 1.2M  800M ACCEPT     0    --  lo     *       0.0.0.0/0            0.0.0.0/0
- 5.6M  3.2G ACCEPT     0    --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
-  10K  600K ACCEPT     6    --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:22
-   5K  300K ACCEPT     6    --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:80
-   2K  120K ACCEPT     6    --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:443
-   1K   60K DROP       0    --  *      *       10.99.99.0/24        0.0.0.0/0
-   500  30K LOG        0    --  *      *       0.0.0.0/0            0.0.0.0/0            LOG flags 0 level 4
+num   pkts bytes target     prot opt in     out     source               destination
+1     1.2M  800M ACCEPT     0    --  lo     *       0.0.0.0/0            0.0.0.0/0
+2     5.6M  3.2G ACCEPT     0    --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+3      10K  600K ACCEPT     6    --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:22
+4       5K  300K ACCEPT     6    --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:80
+5       2K  120K ACCEPT     6    --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:443
+6       1K   60K DROP       0    --  *      *       10.99.99.0/24        0.0.0.0/0
+7       500  30K LOG        0    --  *      *       0.0.0.0/0            0.0.0.0/0            LOG flags 0 level 4 prefix "iptables-drop: "
 ```
-
-**列解读**：
 
 | 列名 | 含义 |
 |------|------|
+| num | 规则行号（用于插入/删除） |
 | pkts | 匹配的包数量 |
 | bytes | 匹配的字节数 |
 | target | 动作（ACCEPT/DROP/REJECT/LOG） |
@@ -287,33 +457,49 @@ pkts bytes target     prot opt in     out     source               destination
 
 ---
 
-## 3. nftables — iptables 的后继者
+### 3. nftables — iptables 的继任者
 
-### 3.1 iptables vs nftables 对比
+#### 3.1 为什么需要 nftables
+
+iptables 存在的问题：
+- **性能差**：规则线性匹配，规则多时性能下降
+- **语法繁琐**：IPv4 和 IPv6 需要分别管理
+- **不支持原子操作**：逐条加载规则，可能出现中间状态
+- **需要 ipset**：集合功能需要额外模块
+
+nftables 的改进：
+- **统一框架**：替代 iptables、ip6tables、arptables、ebtables
+- **更好的性能**：支持集合（set）和映射（map），匹配效率更高
+- **原子操作**：整表替换，避免中间状态
+- **更简洁的语法**：声明式配置
+
+#### 3.2 nftables vs iptables 对比
 
 | 特性 | iptables | nftables |
 |------|----------|----------|
-| **内核集成** | 多个独立模块 | 统一框架 |
-| **规则语法** | 繁琐，多命令 | 简洁，声明式 |
-| **性能** | 线性匹配，规则多时慢 | 更高效的集合匹配 |
-| **原子操作** | ❌ 逐条加载 | ✅ 整表原子替换 |
-| **规则数量上限** | 有限制 | 几乎无上限 |
-| **IPv4/IPv6** | 分开管理（iptables/ip6tables） | 统一管理 |
-| **集合/映射** | ❌ 不支持（需 ipset） | ✅ 原生支持 |
-| **日志** | `-j LOG` | `log prefix "msg"` |
-| **引入时间** | 1999 年 | 2014 年 (Linux 3.13+) |
-| **默认使用** | CentOS 7, Ubuntu 18.04- | RHEL 8+, Debian 10+, Ubuntu 20.04+ |
+| 内核集成 | 多个独立模块 | 统一框架（nf_tables） |
+| 规则语法 | 繁琐，多命令 | 简洁，声明式 |
+| 性能 | 线性匹配 | 集合匹配（O(1)） |
+| 原子操作 | 逐条加载 | 整表原子替换 |
+| IPv4/IPv6 | 分开管理 | 统一管理（inet 族） |
+| 集合/映射 | 需要 ipset | 原生支持 |
+| 日志 | `-j LOG` | `log prefix "msg"` |
+| 引入时间 | 1999 年 | 2014 年（Linux 3.13+） |
+| 默认使用 | CentOS 7, Ubuntu 18.04 | RHEL 8+, Debian 10+, Ubuntu 20.04+ |
 
-### 3.2 nftables 架构
+#### 3.3 nftables 架构
 
 ```
 nftables 层次结构：
 ┌───────────────────────────────────┐
 │           nftables                │
 │  ┌─────────────────────────────┐  │
-│  │         table (表)           │  │
+│  │    table (表)               │  │
+│  │    族: ip/ip6/inet/arp/...  │  │
 │  │  ┌───────────────────────┐  │  │
-│  │  │      chain (链)       │  │  │
+│  │  │    chain (链)         │  │  │
+│  │  │    类型: filter/nat   │  │  │
+│  │  │    hook: input/output │  │  │
 │  │  │  ┌─────────────────┐  │  │  │
 │  │  │  │   rule (规则)   │  │  │  │
 │  │  │  │   rule (规则)   │  │  │  │
@@ -322,11 +508,21 @@ nftables 层次结构：
 │  └─────────────────────────────┘  │
 └───────────────────────────────────┘
 
-类型: filter, nat, route
-族  : ip, ip6, inet, arp, bridge, netdev
+族(family):
+  ip      - 仅 IPv4
+  ip6     - 仅 IPv6
+  inet    - IPv4 + IPv6（推荐）
+  arp     - ARP
+  bridge  - 桥接
+  netdev  - 网络设备
+
+表类型(type):
+  filter  - 过滤（默认）
+  nat     - 地址转换
+  route   - 路由
 ```
 
-### 3.3 nftables 基本命令
+#### 3.4 nftables 基本命令
 
 ```bash
 # 安装 nftables
@@ -336,56 +532,55 @@ sudo yum install -y nftables         # RHEL/CentOS 8+
 # 启动并启用
 sudo systemctl enable --now nftables
 
-# 查看当前规则
-sudo nft list ruleset
-
-# 查看特定表
-sudo nft list table inet filter
+# ===== 查看规则 =====
+sudo nft list ruleset                 # 查看所有规则
+sudo nft list table inet filter       # 查看特定表
+sudo nft -a list ruleset              # 查看所有规则（含句柄）
 
 # ===== 创建表 =====
-# 族: inet(双栈), ip(IPv4), ip6(IPv6), arp, bridge, netdev
-sudo nft add table inet myfilter
-sudo nft add table ip mynat
+sudo nft add table inet myfilter      # 创建 inet 族的表
 
 # ===== 创建链 =====
-# 类型: filter, nat, route
-# hook: prerouting, input, forward, output, postrouting
-# priority: 数值，越小优先级越高 (filter=0, dstnat=-100, srcnat=100)
-sudo nft add chain inet myfilter input { type filter hook input priority 0 \; policy drop \; }
-sudo nft add chain inet myfilter forward { type filter hook forward priority 0 \; policy drop \; }
-sudo nft add chain inet myfilter output { type filter hook output priority 0 \; policy accept \; }
+# 语法：nft add chain <族> <表> <链名> { type <类型> hook <钩子> priority <优先级> \; policy <策略> \; }
+sudo nft add chain inet myfilter input \
+  { type filter hook input priority 0 \; policy drop \; }
+sudo nft add chain inet myfilter forward \
+  { type filter hook forward priority 0 \; policy drop \; }
+sudo nft add chain inet myfilter output \
+  { type filter hook output priority 0 \; policy accept \; }
 
 # ===== 添加规则 =====
+# 允许回环
+sudo nft add rule inet myfilter input iifname lo accept
+
 # 允许已建立的连接
 sudo nft add rule inet myfilter input ct state established,related accept
 
-# 允许回环
-sudo nft add rule inet myfilter input iifname lo accept
+# 丢弃无效连接
+sudo nft add rule inet myfilter input ct state invalid drop
 
 # 允许 SSH
 sudo nft add rule inet myfilter input tcp dport 22 accept
 
-# 允许 HTTP/HTTPS
+# 允许 HTTP/HTTPS（多端口）
 sudo nft add rule inet myfilter input tcp dport { 80, 443 } accept
 
 # 允许 ICMP
 sudo nft add rule inet myfilter input ip protocol icmp accept
 
-# 使用集合（set）一次性匹配多个 IP
+# 使用集合（set）
 sudo nft add set inet myfilter allowlist { type ipv4_addr \; }
 sudo nft add element inet myfilter allowlist { 192.168.1.100, 192.168.1.101, 10.0.0.50 }
 sudo nft add rule inet myfilter input ip saddr @allowlist accept
 
 # 动态集合（超时自动过期）
 sudo nft add set inet myfilter banlist { type ipv4_addr \; flags timeout \; timeout 1h \; }
-sudo nft add element inet myfilter banlist { 10.99.99.99 }
+sudo nft add element inet myfilter banlist { 10.99.99.99 timeout 30m }
 sudo nft add rule inet myfilter input ip saddr @banlist drop
 
 # ===== 管理规则 =====
-# 列出所有规则（含句柄）
-sudo nft -a list ruleset
-
 # 按句柄删除规则
+sudo nft -a list inet myfilter input    # 查看句柄
 sudo nft delete rule inet myfilter input handle 5
 
 # 清空表
@@ -395,20 +590,13 @@ sudo nft flush table inet myfilter
 sudo nft delete table inet myfilter
 
 # ===== 保存与加载 =====
-# 保存到文件
-sudo nft list ruleset > /etc/nftables.conf
-
-# 从文件加载
-sudo nft -f /etc/nftables.conf
-
-# 完全替换（原子操作）
-sudo nft -f /etc/nftables.conf
+sudo nft list ruleset > /etc/nftables.conf    # 保存
+sudo nft -f /etc/nftables.conf                 # 加载
 ```
 
-### 3.4 nftables 配置文件示例
+#### 3.5 nftables 配置文件示例
 
 ```bash
-# /etc/nftables.conf
 #!/usr/sbin/nft -f
 
 # 清空现有规则
@@ -448,13 +636,15 @@ table inet filter {
         tcp dport { 80, 443 } accept
 
         # 允许监控端口
-        tcp dport 9090 accept  # Prometheus
-        tcp dport 9100 accept  # Node Exporter
+        tcp dport { 9090, 9100, 9115 } accept  # Prometheus
 
         # 阻止危险端口
         tcp dport @blocked_ports drop
 
-        # 记录并拒绝其他所有
+        # 限速防暴力破解
+        tcp dport 22 ct state new limit rate 3/minute accept
+
+        # 记录并拒绝其他
         log prefix "[nftables-input-drop] " level info
         counter drop
     }
@@ -469,26 +659,101 @@ table inet filter {
 }
 ```
 
+#### 3.6 从 iptables 迁移到 nftables
+
+```bash
+# 方法 1：使用 iptables-translate 工具
+# 将 iptables 规则转换为 nftables 规则
+sudo iptables-translate -A INPUT -p tcp --dport 80 -j ACCEPT
+# 输出：nft add rule ip filter INPUT tcp dport 80 counter accept
+
+# 批量转换
+sudo iptables-save | iptables-restore-translate > /tmp/nftables-ruleset.conf
+
+# 方法 2：手动重写（推荐，可以优化规则结构）
+
+# 方法 3：使用 nftables 兼容层
+# nftables 提供了 iptables 兼容层，可以在过渡期使用
+sudo update-alternatives --set iptables /usr/sbin/iptables-nft
+sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
+```
+
 ---
 
-## 4. 云安全组
+### 4. firewalld — 高级防火墙前端
 
-### 4.1 云安全组 vs iptables 对比
+#### 4.1 firewalld 简介
 
-| 特性 | iptables/nftables | 云安全组 (AWS/Aliyun/Tencent) |
-|------|-------------------|-------------------------------|
+firewalld 是 CentOS/RHEL/Fedora 的默认防火墙管理工具，底层使用 nftables（RHEL 8+）或 iptables（RHEL 7）。
+
+```bash
+# 检查 firewalld 状态
+sudo systemctl status firewalld
+
+# 启动/停止
+sudo systemctl start firewalld
+sudo systemctl stop firewalld
+
+# 查看默认区域
+sudo firewall-cmd --get-default-zone
+
+# 查看所有区域
+sudo firewall-cmd --get-zones
+
+# 查看区域详情
+sudo firewall-cmd --zone=public --list-all
+
+# 添加服务
+sudo firewall-cmd --zone=public --add-service=http --permanent
+sudo firewall-cmd --zone=public --add-service=https --permanent
+
+# 添加端口
+sudo firewall-cmd --zone=public --add-port=8080/tcp --permanent
+
+# 删除规则
+sudo firewall-cmd --zone=public --remove-service=http --permanent
+
+# 重新加载
+sudo firewall-cmd --reload
+
+# 添加富规则（Rich Rule）
+sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="10.0.0.0/8" port port="22" protocol="tcp" accept'
+
+# 端口转发
+sudo firewall-cmd --permanent --add-forward-port=port=8080:proto=tcp:toport=80
+sudo firewall-cmd --permanent --add-forward-port=port=8080:proto=tcp:toaddr=10.0.1.50:toport=80
+```
+
+#### 4.2 firewalld 区域
+
+| 区域 | 默认行为 | 适用场景 |
+|------|----------|----------|
+| drop | 丢弃所有入站 | 最严格 |
+| block | 拒绝所有入站（返回错误） | 严格 |
+| public | 仅允许选择的服务 | 公网服务器（默认） |
+| external | 伪装（MASQUERADE） | 外部网络 |
+| internal | 信任大部分 | 内部网络 |
+| trusted | 允许所有 | 完全信任 |
+
+---
+
+### 5. 云安全组
+
+#### 5.1 云安全组 vs iptables
+
+| 特性 | iptables/nftables | 云安全组 |
+|------|-------------------|----------|
 | 运行位置 | 操作系统内核 | 虚拟化层/Hypervisor |
 | 管理方式 | 命令行 | Web 控制台 / API / Terraform |
 | 规则方向 | 入站+出站都需要配置 | 通常有状态（自动放行回包） |
 | 性能影响 | 消耗 CPU | 几乎无影响（硬件加速） |
 | 适用场景 | 主机级别精细控制 | 实例级别粗粒度控制 |
-| 优先级 | 规则顺序匹配 | 按优先级或顺序匹配 |
 | 日志 | 需额外配置 | 部分云厂商原生支持 |
 
-### 4.2 AWS 安全组配置示例
+#### 5.2 AWS 安全组配置
 
 ```bash
-# 使用 AWS CLI 创建安全组
+# 创建安全组
 aws ec2 create-security-group \
   --group-name sre-web-sg \
   --description "SRE Web Server Security Group" \
@@ -497,66 +762,28 @@ aws ec2 create-security-group \
 # 添加入站规则
 aws ec2 authorize-security-group-ingress \
   --group-id sg-0123456789 \
-  --protocol tcp \
-  --port 22 \
-  --cidr 10.0.0.0/8
+  --protocol tcp --port 22 --cidr 10.0.0.0/8
 
 aws ec2 authorize-security-group-ingress \
   --group-id sg-0123456789 \
-  --protocol tcp \
-  --port 80 \
-  --cidr 0.0.0.0/0
+  --protocol tcp --port 80 --cidr 0.0.0.0/0
 
 aws ec2 authorize-security-group-ingress \
   --group-id sg-0123456789 \
-  --protocol tcp \
-  --port 443 \
-  --cidr 0.0.0.0/0
+  --protocol tcp --port 443 --cidr 0.0.0.0/0
 
 # 查看安全组规则
 aws ec2 describe-security-groups --group-ids sg-0123456789
 ```
 
-### 4.3 阿里云安全组配置示例
-
-```bash
-# 使用阿里云 CLI 创建安全组
-aliyun ecs CreateSecurityGroup \
-  --RegionId cn-hangzhou \
-  --VpcId vpc-uf6xxxxxxxx \
-  --SecurityGroupName "sre-web-sg" \
-  --Description "SRE Web Server Security Group"
-
-# 添加入站规则
-aliyun ecs AuthorizeSecurityGroup \
-  --RegionId cn-hangzhou \
-  --SecurityGroupId sg-uf6xxxxxxxx \
-  --IpProtocol tcp \
-  --PortRange 22/22 \
-  --SourceCidrIp 10.0.0.0/8 \
-  --Policy accept
-
-aliyun ecs AuthorizeSecurityGroup \
-  --RegionId cn-hangzhou \
-  --SecurityGroupId sg-uf6xxxxxxxx \
-  --IpProtocol tcp \
-  --PortRange 80/80 \
-  --SourceCidrIp 0.0.0.0/0 \
-  --Policy accept
-
-# 使用 Terraform 管理（推荐）
-```
-
-### 4.4 Terraform 安全组配置（多云通用）
+#### 5.3 Terraform 安全组配置（多云通用）
 
 ```hcl
-# main.tf
 resource "aws_security_group" "sre_web" {
   name        = "sre-web-sg"
   description = "SRE Web Server Security Group"
   vpc_id      = var.vpc_id
 
-  # SSH — 仅限内网
   ingress {
     description = "SSH from internal"
     from_port   = 22
@@ -565,7 +792,6 @@ resource "aws_security_group" "sre_web" {
     cidr_blocks = ["10.0.0.0/8"]
   }
 
-  # HTTP
   ingress {
     description = "HTTP from anywhere"
     from_port   = 80
@@ -574,7 +800,6 @@ resource "aws_security_group" "sre_web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # HTTPS
   ingress {
     description = "HTTPS from anywhere"
     from_port   = 443
@@ -583,16 +808,6 @@ resource "aws_security_group" "sre_web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # 监控端口（Prometheus + Node Exporter）
-  ingress {
-    description = "Prometheus and Node Exporter"
-    from_port   = 9090
-    to_port     = 9100
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"]
-  }
-
-  # 出站 — 允许所有
   egress {
     from_port   = 0
     to_port     = 0
@@ -600,119 +815,84 @@ resource "aws_security_group" "sre_web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name    = "sre-web-sg"
-    Managed = "terraform"
-  }
+  tags = { Name = "sre-web-sg" }
 }
 ```
 
-### 4.5 安全组最佳实践
+#### 5.4 安全组最佳实践
 
 | 原则 | 说明 |
 |------|------|
-| **最小权限** | 只开放必要端口，源 IP 尽量限制 |
-| **分层防护** | 安全组（外层）+ iptables（内层）双重保护 |
-| **命名规范** | 明确用途，如 `sre-web-sg`, `sre-db-sg` |
-| **定期审计** | 检查是否有过宽的规则（如 0.0.0.0/0 + 22） |
-| **标签管理** | 使用标签标记规则用途和负责人 |
-| **IaC 管理** | 用 Terraform 等工具管理，避免手动变更 |
+| 最小权限 | 只开放必要端口，源 IP 尽量限制 |
+| 分层防护 | 安全组（外层）+ iptables（内层）双重保护 |
+| 命名规范 | 明确用途，如 `sre-web-sg`, `sre-db-sg` |
+| 定期审计 | 检查是否有过宽的规则（如 0.0.0.0/0 + 22） |
+| IaC 管理 | 用 Terraform 等工具管理，避免手动变更 |
 
 ---
 
-## 5. SRE 实战案例：fail2ban + iptables 自动封禁
+### 6. fail2ban 自动封禁
 
-### 5.1 问题描述
+#### 6.1 fail2ban 原理
 
-**背景**：一台面向公网的 Web 服务器持续遭到 SSH 暴力破解攻击。日志显示每分钟有数百次失败的登录尝试，来自全球各地的 IP。
+fail2ban 通过分析日志文件，检测暴力破解等恶意行为，自动在防火墙中封禁恶意 IP。
 
-**影响**：
-- 系统负载升高（大量认证进程）
-- 日志文件快速膨胀
-- 安全风险增加
-
-### 5.2 攻击现象
-
-```bash
-# 查看失败登录统计
-sudo grep "Failed password" /var/log/auth.log | awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | head -20
-
-# 输出示例：
-#    1250 45.148.10.23
-#     876 103.75.201.45
-#     654 185.220.101.34
-#     543 91.240.118.172
-#     432 198.235.24.50
+```
+日志文件 ──→ fail2ban 监控 ──→ 正则匹配 ──→ 计数器 ──→ 超过阈值？
+                                                        │
+                                              是 ←──────┘
+                                               │
+                                               ▼
+                                     执行封禁动作（iptables/nftables）
+                                               │
+                                               ▼
+                                     定时解封（bantime 到期）
 ```
 
-**攻击分析表**：
-
-| IP | 尝试次数 | 来源地 | 时间跨度 |
-|----|----------|--------|----------|
-| 45.148.10.23 | 1250 | 俄罗斯 | 2小时内 |
-| 103.75.201.45 | 876 | 印度 | 3小时内 |
-| 185.220.101.34 | 654 | 德国（Tor 出口） | 1小时内 |
-
-### 5.3 解决方案：fail2ban + iptables
-
-#### 步骤 1：安装 fail2ban
+#### 6.2 安装和配置
 
 ```bash
-# Debian/Ubuntu
-sudo apt-get update
-sudo apt-get install -y fail2ban
+# 安装
+sudo apt-get update && sudo apt-get install -y fail2ban  # Debian/Ubuntu
+sudo yum install -y epel-release && sudo yum install -y fail2ban  # RHEL/CentOS
 
-# RHEL/CentOS/Rocky
-sudo yum install -y epel-release
-sudo yum install -y fail2ban
-
-# 检查版本
-fail2ban-server --version
-```
-
-#### 步骤 2：配置 fail2ban
-
-```bash
-# 创建本地配置（不要直接修改 jail.conf）
+# 创建本地配置
 sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
-
-# 编辑配置
-sudo nano /etc/fail2ban/jail.local
 ```
 
-**关键配置项（jail.local）**：
+**关键配置（jail.local）**：
 
 ```ini
 [DEFAULT]
-# 白名单 IP（不会被封禁）
+# 白名单 IP
 ignoreip = 127.0.0.1/8 10.0.0.0/8 192.168.0.0/16
 
-# 封禁时间（秒）—— 3600 = 1小时
+# 封禁时间（秒）
 bantime  = 3600
 
 # 查找时间窗口（秒）
 findtime = 600
 
-# 在窗口内最大失败次数
+# 最大失败次数
 maxretry = 5
 
-# 使用哪种 ban 动作（后端）
+# 后端
 backend = systemd
 
-# 默认动作（使用 iptables）
+# 默认动作
 action = iptables-multiport[name=default, port="ssh,http,https"]
 
-# ===== SSH 防护 =====
+# SSH 防护
 [sshd]
 enabled  = true
 port     = ssh
 filter   = sshd
 logpath  = /var/log/auth.log
 maxretry = 3
-bantime  = 7200    # SSH 封禁更久
-findtime = 300     # 5分钟内
+bantime  = 7200
+findtime = 300
 
-# ===== Nginx 登录防护 =====
+# Nginx 登录防护
 [nginx-http-auth]
 enabled  = true
 port     = http,https
@@ -721,7 +901,7 @@ logpath  = /var/log/nginx/error.log
 maxretry = 3
 bantime  = 3600
 
-# ===== Nginx CC 攻击防护 =====
+# Nginx CC 攻击防护
 [nginx-cc]
 enabled  = true
 port     = http,https
@@ -732,65 +912,23 @@ findtime = 60
 bantime  = 1800
 ```
 
-#### 步骤 3：创建自定义过滤器
+#### 6.3 管理和监控
 
 ```bash
-# 创建 Nginx CC 攻击过滤器
-sudo nano /etc/fail2ban/filter.d/nginx-cc.conf
-```
-
-```ini
-# /etc/fail2ban/filter.d/nginx-cc.conf
-[Definition]
-# 匹配短时间内大量请求的 IP
-failregex = ^<HOST> -.*"(GET|POST).*HTTP.*" (200|301|302) .*$
-ignoreregex =
-```
-
-#### 步骤 4：启动与监控
-
-```bash
-# 启动 fail2ban
+# 启动
 sudo systemctl enable --now fail2ban
 
 # 查看状态
 sudo fail2ban-client status
 
-# 查看特定 jail 状态
+# 查看特定 jail
 sudo fail2ban-client status sshd
 
-# 输出示例：
-# Status for the jail: sshd
-# |- Filter
-# |  |- Currently failed: 5
-# |  |- Total failed:     1250
-# |  `- File list:        /var/log/auth.log
-# `- Actions
-#    |- Currently banned: 12
-#    |- Total banned:     47
-#    `- Banned IP list:   45.148.10.23 103.75.201.45 185.220.101.34 ...
-
-# 查看 iptables 中的封禁规则
-sudo iptables -L f2b-sshd -n -v
-
-# 输出示例：
-# Chain f2b-sshd (1 references)
-# pkts bytes target     prot opt in     out     source               destination
-#  12K  720K DROP       0    --  *      *       45.148.10.23         0.0.0.0/0
-#   8K  480K DROP       0    --  *      *       103.75.201.45        0.0.0.0/0
-# 9.8M  588M RETURN     0    --  *      *       0.0.0.0/0            0.0.0.0/0
-```
-
-#### 步骤 5：手动管理
-
-```bash
-# 手动封禁 IP
+# 手动封禁/解封
 sudo fail2ban-client set sshd banip 45.148.10.23
-
-# 手动解封 IP
 sudo fail2ban-client set sshd unbanip 45.148.10.23
 
-# 查看封禁的 IP
+# 查看封禁 IP
 sudo fail2ban-client get sshd banip
 
 # 重载配置
@@ -798,260 +936,28 @@ sudo fail2ban-client reload
 
 # 查看日志
 sudo tail -f /var/log/fail2ban.log
-
-# 日志示例：
-# 2024-01-15 10:30:45,123 fail2ban.actions        [1234]: NOTICE  [sshd] Ban 45.148.10.23
-# 2024-01-15 11:30:45,456 fail2ban.actions        [1234]: NOTICE  [sshd] Unban 45.148.10.23
-```
-
-#### 步骤 6：效果验证
-
-```bash
-# 封禁前：持续看到失败登录
-sudo tail -f /var/log/auth.log | grep "Failed password"
-
-# 封禁后：被 ban 的 IP 无法建立连接
-# 用 tcpdump 验证
-sudo tcpdump -i any -nn host 45.148.10.23
-# 应该看到 SYN 包但没有回应（DROP 规则生效）
-
-# 检查 iptables 计数器（看到 DROP 计数增长说明规则在工作）
-sudo iptables -L f2b-sshd -n -v --line-numbers
-```
-
-### 5.4 效果对比
-
-| 指标 | 封禁前 | 封禁后 |
-|------|--------|--------|
-| SSH 失败登录/分钟 | ~500 | ~5（来自不同 IP 的试探） |
-| 系统负载 | 3.5 | 0.3 |
-| auth.log 增长 | 50MB/小时 | 1MB/小时 |
-| 恶意 IP 数量 | 持续增加 | 自动封禁，动态清零 |
-
-### 5.5 进阶：与云安全组联动
-
-```bash
-# 如果使用云服务器，fail2ban 可以通过 API 直接操作安全组
-# 示例：使用自定义 action 调用阿里云 API
-
-# /etc/fail2ban/action.d/aliyun-waf.conf
-[Definition]
-actionban = aliyun ecs AuthorizeSecurityGroup \
-  --RegionId cn-hangzhou \
-  --SecurityGroupId sg-xxx \
-  --IpProtocol tcp \
-  --PortRange 1/65535 \
-  --SourceCidrIp <ip>/32 \
-  --Policy drop
-
-actionunban = aliyun ecs RevokeSecurityGroup \
-  --RegionId cn-hangzhou \
-  --SecurityGroupId sg-xxx \
-  --IpProtocol tcp \
-  --PortRange 1/65535 \
-  --SourceCidrIp <ip>/32 \
-  --Policy drop
 ```
 
 ---
 
-## 6. 练习
+### 7. SRE 实战案例
 
-### 练习 1：配置基本防火墙规则
+#### 7.1 案例一：fail2ban 自动封禁暴力破解
 
-```bash
-# ===== 目标：搭建一个生产级基础防火墙 =====
-
-# 1. 查看当前规则
-sudo iptables -L -n -v --line-numbers
-
-# 2. 清空现有规则（如果有重要规则请先备份）
-sudo iptables-save > ~/iptables-backup-$(date +%Y%m%d).bak
-sudo iptables -F
-sudo iptables -X
-
-# 3. 设置默认策略
-sudo iptables -P INPUT DROP
-sudo iptables -P FORWARD DROP
-sudo iptables -P OUTPUT ACCEPT
-
-# 4. 允许回环
-sudo iptables -A INPUT -i lo -j ACCEPT
-
-# 5. 允许已建立的连接（关键！）
-sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-# 6. 允许 SSH
-sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-
-# 7. 允许 HTTP/HTTPS
-sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
-sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
-
-# 8. 允许 ICMP（限速）
-sudo iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s --limit-burst 4 -j ACCEPT
-
-# 9. 添加日志（记录被拒绝的包）
-sudo iptables -A INPUT -m limit --limit 5/min -j LOG --log-prefix "iptables-drop: " --log-level 4
-
-# 10. 查看最终规则
-sudo iptables -L -n -v --line-numbers
-
-# 11. 保存规则
-sudo iptables-save > /etc/iptables/rules.v4
-
-# 12. 验证：测试被拒绝的端口
-curl -v --connect-timeout 3 http://127.0.0.1:8080  # 应该超时/拒绝
-```
-
-### 练习 2：使用 nftables 实现相同规则
+**背景**：公网服务器持续遭到 SSH 暴力破解，每分钟数百次失败登录。
 
 ```bash
-# ===== 目标：用 nftables 实现练习 1 的防火墙 =====
+# 查看攻击情况
+sudo grep "Failed password" /var/log/auth.log | awk '{print $(NF-3)}' | sort | uniq -c | sort -rn | head -20
 
-# 1. 安装 nftables
-sudo apt-get install -y nftables
-
-# 2. 清空现有规则
-sudo nft flush ruleset
-
-# 3. 创建表和链
-sudo nft add table inet firewall
-sudo nft add chain inet firewall input '{ type filter hook input priority 0\; policy drop\; }'
-sudo nft add chain inet firewall forward '{ type filter hook forward priority 0\; policy drop\; }'
-sudo nft add chain inet firewall output '{ type filter hook output priority 0\; policy accept\; }'
-
-# 4. 添加规则
-sudo nft add rule inet firewall input iifname lo accept
-sudo nft add rule inet firewall input ct state established,related accept
-sudo nft add rule inet firewall input ct state invalid drop
-sudo nft add rule inet firewall input tcp dport 22 accept
-sudo nft add rule inet firewall input tcp dport { 80, 443 } accept
-sudo nft add rule inet firewall input ip protocol icmp accept
-sudo nft add rule inet firewall input limit rate 5/minute log prefix \"nft-drop: \"
-
-# 5. 查看规则
-sudo nft list ruleset
-
-# 6. 保存
-sudo nft list ruleset > /etc/nftables.conf
-```
-
-### 练习 3：模拟攻击并测试 fail2ban
-
-```bash
-# ===== 目标：在测试环境验证 fail2ban 的效果 =====
-
-# 注意：只在测试/开发机器上操作！
-
-# 1. 安装并配置 fail2ban（如上文）
-
-# 2. 模拟 SSH 暴力破解（从另一台机器）
-#    使用 hydra 或简单的循环
-for i in $(seq 1 10); do
-  ssh -o ConnectTimeout=2 -o PasswordAuthentication=yes fakeuser@$(hostname -I | awk '{print $1}') <<< "wrongpass" &
-done
-
-# 3. 在服务器上观察 fail2ban 反应
-sudo tail -f /var/log/fail2ban.log
-
-# 4. 验证 IP 被封禁
-sudo fail2ban-client status sshd
-sudo iptables -L f2b-sshd -n -v
-
-# 5. 验证被封 IP 无法连接（从攻击机）
-ssh user@server  # 应该连接超时
-
-# 6. 解封并恢复
-sudo fail2ban-client set sshd unbanip <攻击IP>
-```
-
----
-
-## 7. 扩展：端口转发 + fail2ban 安装配置
-
-### 7.1 配置端口转发
-
-**场景**：将外部 8080 端口转发到内部 80 端口，或转发到其他服务器。
-
-#### 单服务器端口转发
-
-```bash
-# 1. 启用 IP 转发
-sudo sysctl -w net.ipv4.ip_forward=1
-# 永久生效
-echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
-
-# 2. 使用 iptables 配置 NAT 端口转发
-# 将 8080 转发到 80
-sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 -j REDIRECT --to-port 80
-
-# 3. 查看 NAT 规则
-sudo iptables -t nat -L -n -v
-
-# 4. 保存
-sudo iptables-save > /etc/iptables/rules.v4
-```
-
-#### 跨服务器端口转发
-
-```bash
-# 场景：将本机 8080 转发到 10.0.1.50:80
-
-# 1. 启用转发
-sudo sysctl -w net.ipv4.ip_forward=1
-
-# 2. DNAT：修改目标地址
-sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.0.1.50:80
-
-# 3. SNAT/MASQUERADE：修改源地址（让回包能正确返回）
-sudo iptables -t nat -A POSTROUTING -p tcp -d 10.0.1.50 --dport 80 -j MASQUERADE
-
-# 4. 允许 FORWARD
-sudo iptables -A FORWARD -p tcp -d 10.0.1.50 --dport 80 -j ACCEPT
-sudo iptables -A FORWARD -p tcp -s 10.0.1.50 --sport 80 -j ACCEPT
-
-# 5. 查看完整规则
-sudo iptables -t nat -L -n -v
-sudo iptables -L FORWARD -n -v
-```
-
-#### nftables 端口转发
-
-```bash
-# nftables 实现端口转发（本机 8080 → 80）
-sudo nft add table nat
-sudo nft add chain nat prerouting '{ type nat hook prerouting priority -100\; }'
-sudo nft add chain nat postrouting '{ type nat hook postrouting priority 100\; }'
-sudo nft add rule nat prerouting tcp dport 8080 redirect to :80
-
-# nftables 实现跨服务器转发（本机 8080 → 10.0.1.50:80）
-sudo nft add rule nat prerouting tcp dport 8080 dnat to 10.0.1.50:80
-sudo nft add rule nat postrouting ip daddr 10.0.1.50 tcp dport 80 masquerade
-```
-
-### 7.2 安装和配置 fail2ban（完整步骤）
-
-```bash
-# ===== 完整安装流程 =====
-
-# 1. 安装
-sudo apt-get update && sudo apt-get install -y fail2ban
-
-# 2. 检查服务状态
-sudo systemctl status fail2ban
-
-# 3. 创建本地配置
-sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
-
-# 4. 编辑配置
+# 安装并配置 fail2ban
+sudo apt-get install -y fail2ban
 sudo tee /etc/fail2ban/jail.local > /dev/null << 'EOF'
 [DEFAULT]
 ignoreip = 127.0.0.1/8 10.0.0.0/8
-bantime  = 3600
-findtime = 600
-maxretry = 5
+bantime = 7200
+findtime = 300
+maxretry = 3
 backend = systemd
 
 [sshd]
@@ -1059,119 +965,256 @@ enabled = true
 port = ssh
 filter = sshd
 logpath = /var/log/auth.log
-maxretry = 3
-bantime = 7200
-findtime = 300
 EOF
 
-# 5. 重启服务
-sudo systemctl restart fail2ban
-sudo systemctl enable fail2ban
+sudo systemctl enable --now fail2ban
 
-# 6. 验证
-sudo fail2ban-client status
+# 验证效果
 sudo fail2ban-client status sshd
-
-# 7. 测试
-# 从另一台机器故意输错密码 3 次
-# ssh fakeuser@server  # 输错密码
-
-# 8. 观察
-sudo tail -f /var/log/fail2ban.log
-
-# 9. 管理
-sudo fail2ban-client set sshd unbanip <your-ip>  # 如果误封了自己
-
-# 10. 创建自定义 action（使用 iptables + nftables 双后端）
-# 可以在 /etc/fail2ban/action.d/ 下创建自定义动作
+# Currently banned: 12
+# Total banned: 47
 ```
 
-### 7.3 fail2ban 配置检查清单
+#### 7.2 案例二：端口转发配置
+
+**场景**：将外部 8080 端口转发到内部服务器 10.0.1.50:80
 
 ```bash
-# 检查 fail2ban 是否正确加载
-sudo fail2ban-client ping
-# 应返回: pong
+# 启用 IP 转发
+sudo sysctl -w net.ipv4.ip_forward=1
+echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
 
-# 查看所有 jail
-sudo fail2ban-client status
+# iptables 端口转发
+sudo iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 10.0.1.50:80
+sudo iptables -t nat -A POSTROUTING -p tcp -d 10.0.1.50 --dport 80 -j MASQUERADE
+sudo iptables -A FORWARD -p tcp -d 10.0.1.50 --dport 80 -j ACCEPT
+sudo iptables -A FORWARD -p tcp -s 10.0.1.50 --sport 80 -j ACCEPT
 
-# 查看具体 jail 配置
-sudo fail2ban-client get sshd maxretry
-sudo fail2ban-client get sshd bantime
-sudo fail2ban-client get sshd findtime
-sudo fail2ban-client get sshd logpath
+# 验证
+curl -v http://localhost:8080
+sudo iptables -t nat -L -n -v
+```
 
-# 查看过滤规则匹配测试
-sudo fail2ban-client get sshd failregex
-sudo fail2ban-regex /var/log/auth.log /etc/fail2ban/filter.d/sshd.conf
+#### 7.3 案例三：容器网络与 iptables
 
-# 查看 ban IP 列表
-sudo fail2ban-client get sshd banip
+**背景**：Docker/Kubernetes 与 iptables 的关系
 
-# 检查 iptables 规则
-sudo iptables -L -n -v | grep f2b
+```bash
+# Docker 创建的 iptables 链
+sudo iptables -L -n -v | grep -i docker
+# DOCKER - 用户定义网络
+# DOCKER-ISOLATION-STAGE-1 - 网络隔离
+# DOCKER-ISOLATION-STAGE-2 - 网络隔离
+
+# 查看 Docker 的 NAT 规则
+sudo iptables -t nat -L -n -v | grep -i docker
+
+# K8s 创建的 iptables 链（kube-proxy）
+sudo iptables -L -n -v | grep -i kube
+# KUBE-SERVICES - 服务规则
+# KUBE-EXTERNAL-SERVICES - 外部服务
+# KUBE-FIREWALL - 防火墙规则
+
+# 注意事项：
+# 1. 不要直接修改 Docker/K8s 创建的链
+# 2. 使用 Docker/K8s 的 API 管理网络规则
+# 3. 重启 Docker/K8s 会重建 iptables 规则
+# 4. 使用 `iptables -F` 可能导致容器网络中断
 ```
 
 ---
 
-## 8. 资源
+## 💻 实战练习
 
-### 官方文档
+### 练习 1：配置基本防火墙
+
+```bash
+# 备份现有规则
+sudo iptables-save > ~/iptables-backup-$(date +%Y%m%d).bak
+
+# 清空规则
+sudo iptables -F
+sudo iptables -X
+
+# 设置默认策略
+sudo iptables -P INPUT DROP
+sudo iptables -P FORWARD DROP
+sudo iptables -P OUTPUT ACCEPT
+
+# 添加规则
+sudo iptables -A INPUT -i lo -j ACCEPT
+sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+sudo iptables -A INPUT -p icmp --icmp-type echo-request -j ACCEPT
+
+# 查看规则
+sudo iptables -L -n -v --line-numbers
+
+# 保存
+sudo iptables-save > /etc/iptables/rules.v4
+```
+
+### 练习 2：nftables 实现相同规则
+
+```bash
+sudo nft flush ruleset
+
+sudo nft add table inet firewall
+sudo nft add chain inet firewall input '{ type filter hook input priority 0\; policy drop\; }'
+sudo nft add chain inet firewall forward '{ type filter hook forward priority 0\; policy drop\; }'
+sudo nft add chain inet firewall output '{ type filter hook output priority 0\; policy accept\; }'
+
+sudo nft add rule inet firewall input iifname lo accept
+sudo nft add rule inet firewall input ct state established,related accept
+sudo nft add rule inet firewall input ct state invalid drop
+sudo nft add rule inet firewall input tcp dport 22 accept
+sudo nft add rule inet firewall input tcp dport { 80, 443 } accept
+sudo nft add rule inet firewall input ip protocol icmp accept
+
+sudo nft list ruleset
+sudo nft list ruleset > /etc/nftables.conf
+```
+
+### 练习 3：NAT 配置
+
+```bash
+# 场景：搭建一个简单的 NAT 网关
+# eth0 = 外网，eth1 = 内网 (10.0.0.0/24)
+
+# 启用转发
+sudo sysctl -w net.ipv4.ip_forward=1
+
+# SNAT（内网访问外网）
+sudo iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o eth0 -j MASQUERADE
+
+# DNAT（外部访问内部 Web 服务器）
+sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j DNAT --to-destination 10.0.0.100:80
+sudo iptables -A FORWARD -p tcp -d 10.0.0.100 --dport 80 -j ACCEPT
+
+# 查看 NAT 规则
+sudo iptables -t nat -L -n -v
+```
+
+---
+
+## 🎯 面试题精选
+
+### Q1：iptables 的四表五链是什么？数据包是如何流经这些链的？
+
+**参考答案**：
+
+**四表**（优先级从高到低）：
+- raw：连接追踪之前处理
+- mangle：修改数据包头部
+- nat：网络地址转换
+- filter：数据包过滤（默认）
+
+**五链**：
+- PREROUTING：数据包到达后，路由判断前
+- INPUT：目标为本机
+- FORWARD：经过本机转发
+- OUTPUT：本机产生
+- POSTROUTING：数据包离开前
+
+**数据包流向**：
+- 入站：PREROUTING → 路由判断 → INPUT → 本地进程
+- 转发：PREROUTING → 路由判断 → FORWARD → POSTROUTING
+- 出站：本地进程 → OUTPUT → POSTROUTING
+
+### Q2：SNAT 和 DNAT 的区别是什么？
+
+**参考答案**：
+
+- **SNAT（Source NAT）**：修改数据包的**源地址**，用于内网服务器访问外网时隐藏内网 IP。在 POSTROUTING 链执行。
+- **DNAT（Destination NAT）**：修改数据包的**目标地址**，用于将外部请求转发到内部服务器。在 PREROUTING 链执行。
+
+```
+SNAT：内网 10.0.1.100 → 外网时源地址改为 203.0.113.1
+DNAT：外部访问 203.0.113.1:8080 → 转发到 10.0.1.50:80
+```
+
+### Q3：nftables 相比 iptables 有什么优势？
+
+**参考答案**：
+
+1. **统一框架**：替代 iptables/ip6tables/arptables/ebtables
+2. **更好的性能**：支持集合（set），匹配效率 O(1)
+3. **原子操作**：整表替换，避免中间状态
+4. **更简洁的语法**：声明式配置
+5. **原生 IPv4/IPv6 双栈**：使用 inet 族统一管理
+6. **动态集合**：支持超时自动过期
+
+### Q4：什么是 conntrack？为什么它可能导致性能问题？
+
+**参考答案**：
+
+conntrack（连接追踪）是 Netfilter 的模块，用于追踪每个连接的状态（NEW、ESTABLISHED、RELATED 等）。它是状态防火墙和 NAT 的基础。
+
+**性能问题**：
+- 每个连接都需要在 conntrack 表中创建条目
+- 高并发时 conntrack 表可能满（默认 65536）
+- conntrack 表满后新连接被丢弃
+
+**解决方案**：
+```bash
+# 增大 conntrack 表
+sudo sysctl -w net.netfilter.nf_conntrack_max=1000000
+
+# 对高流量服务禁用 conntrack
+sudo iptables -t raw -A PREROUTING -p tcp --dport 80 -j NOTRACK
+```
+
+### Q5：如何防止 SSH 暴力破解？
+
+**参考答案**：
+
+```bash
+# 方法 1：iptables 限速
+sudo iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW \
+  -m recent --set --name SSH
+sudo iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW \
+  -m recent --update --seconds 60 --hitcount 4 --name SSH -j DROP
+
+# 方法 2：fail2ban
+sudo apt-get install -y fail2ban
+# 配置 jail.local，maxretry=3, bantime=7200
+
+# 方法 3：密钥认证 + 禁用密码登录
+# /etc/ssh/sshd_config:
+# PasswordAuthentication no
+# PermitRootLogin no
+
+# 方法 4：修改 SSH 端口
+# /etc/ssh/sshd_config:
+# Port 2222
+```
+
+---
+
+## 📚 深入阅读
 
 | 资源 | 链接 |
 |------|------|
 | iptables 官方文档 | https://www.netfilter.org/documentation/ |
-| iptables man page | https://linux.die.net/man/8/iptables |
 | nftables 官方 wiki | https://wiki.nftables.org/ |
-| nftables 手册 | https://manpages.debian.org/bookworm/nftables/nft.8.en.html |
 | fail2ban 官方文档 | https://www.fail2ban.org/wiki/index.php/Main_Page |
-| fail2ban GitHub | https://github.com/fail2ban/fail2ban |
-
-### 云厂商文档
-
-| 资源 | 链接 |
-|------|------|
 | AWS 安全组文档 | https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html |
 | 阿里云安全组文档 | https://help.aliyun.com/zh/ecs/user-guide/security-group-overview |
-| 腾讯云安全组文档 | https://cloud.tencent.com/document/product/213/18196 |
-
-### 深入学习
-
-| 资源 | 链接 |
-|------|------|
-| iptables 教程 (Frozentux) | https://www.frozentux.net/iptables-tutorial/ |
 | nftables 迁移指南 | https://wiki.nftables.org/wiki-nftables/index.php/Moving_from_iptables_to_nftables |
-| fail2ban 配置指南 | https://www.digitalocean.com/community/tutorials/how-fail2ban-works-to-protect-services-on-a-linux-server |
-| Linux 防火墙权威指南 | https://www.netfilter.org/documentation/HOWTO/packet-filtering-HOWTO.html |
-| 云安全最佳实践 | https://aws.amazon.com/architecture/security-identity-compliance/ |
-
-### 工具
-
-| 工具 | 链接 |
-|------|------|
-| iptables-save/restore | 系统自带 |
-| iptables-persistent (Debian) | `apt install iptables-persistent` |
-| firewalld (RHEL) | 基于 nftables 的前端工具 |
-| ufw (Ubuntu) | `apt install ufw`，iptables 简化前端 |
 
 ---
 
-## 📝 今日总结
+## ✅ 自检清单
 
-**关键收获**：
-1. **iptables 四表五链**是理解 Linux 防火墙的核心，数据包流向决定了规则匹配顺序
-2. **白名单模式**（默认 DROP）比黑名单模式更安全，但务必先放行 SSH 和已建立连接
-3. **nftables** 是 iptables 的现代化替代，语法更简洁、性能更好、支持集合和原子操作
-4. **云安全组 + 主机防火墙** = 分层防御（纵深防御原则），两者缺一不可
-5. **fail2ban** 是自动化的入侵防护工具，通过分析日志 + iptables 封禁实现动态防护
-6. 端口转发需要 `ip_forward=1` + DNAT + SNAT 三步，缺一不可
-
-**运维金句**：
-> 「防火墙规则不是写完了就完了，要定期审计、定期清理。规则多了，就成了漏洞。」
-
-**明日预告**：Day 40 — DNS 原理与排查（dig/nsd + CoreDNS 配置 + DNS 故障排查）
-
----
-
-> 💡 **SRE 心法**：「安全不是产品，是过程。」防火墙规则只是起点，持续监控、定期审计、自动化响应才是真正的安全。
+- [ ] 理解 Netfilter 框架和 5 个 Hook 点
+- [ ] 掌握 iptables 四表五链的概念和数据包流向
+- [ ] 能配置基本的 iptables 防火墙规则
+- [ ] 理解 NAT（SNAT/DNAT/MASQUERADE）的工作原理
+- [ ] 理解 conntrack 连接追踪及其性能影响
+- [ ] 掌握 nftables 的基本语法和配置
+- [ ] 能配置云安全组（AWS/阿里云）
+- [ ] 能配置 fail2ban 自动封禁暴力破解
+- [ ] 理解容器网络与 iptables 的关系
+- [ ] 完成所有实战练习

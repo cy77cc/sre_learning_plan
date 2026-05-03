@@ -103,6 +103,92 @@ rtt min/avg/max/mdev = 44.812/45.392/46.132/0.487 ms
 | 128 | Windows | 收到 TTL ≤ 128 |
 | 255 | 网络设备 (路由器/交换机) | 收到 TTL ≤ 255 |
 
+#### 1.4 MTU 路径发现 (Path MTU Discovery)
+
+MTU (Maximum Transmission Unit) 是网络链路能够传输的最大数据包大小。以太网默认 MTU 为 1500 字节。
+
+```
+MTU 路径发现原理:
+
+发送 DF (Don't Fragment) 标志的包，逐渐增大包大小:
+  1400 bytes → 通过 ✅
+  1450 bytes → 通过 ✅
+  1472 bytes → 通过 ✅
+  1473 bytes → 返回 ICMP "Fragmentation Needed" ❌
+  
+路径 MTU = 1472 + 28 (IP+ICMP 头) = 1500
+```
+
+```bash
+# 使用 ping 进行 MTU 发现
+# -M do: 设置 DF 标志 (Don't Fragment)
+# -s: 设置包大小 (不包含 IP/ICMP 头部的 28 字节)
+
+# 标准以太网 MTU 测试 (1500 - 28 = 1472)
+ping -c 4 -M do -s 1472 www.example.com
+# 成功: 1500 就是路径 MTU
+
+# 如果失败，逐步减小
+ping -c 4 -M do -s 1400 www.example.com
+ping -c 4 -M do -s 1450 www.example.com
+ping -c 4 -M do -s 1470 www.example.com
+
+# 二分法快速定位 MTU
+mtu_test() {
+    local host="$1"
+    local low=0
+    local high=9000  # 支持巨型帧的网络
+    
+    while [ $((high - low)) -gt 1 ]; do
+        local mid=$(( (low + high) / 2 ))
+        if ping -c 1 -W 2 -M do -s "$mid" "$host" &>/dev/null; then
+            low=$mid
+        else
+            high=$mid
+        fi
+    done
+    
+    echo "路径 MTU: $((low + 28)) 字节 (数据包大小: $low)"
+}
+
+mtu_test www.example.com
+```
+
+**MTU 问题排查场景：**
+
+| 现象 | 可能原因 | 排查方法 |
+|------|---------|---------|
+| 小包通大包不通 | MTU 不匹配 | ping -M do -s 测试 |
+| SSH 能连但传文件卡住 | MTU 问题导致大包丢弃 | 降低 MTU 或调整 MSS |
+| 网页加载卡住 | TCP MSS > 路径 MTU | 抓包检查 MSS 协商 |
+| VPN 连接后部分网站不通 | VPN 封装降低了有效 MTU | 调整 VPN MTU |
+
+#### 1.5 ping 高级用法
+
+```bash
+# 指定源地址 (多网卡场景)
+ping -c 4 -I 192.168.1.100 www.example.com
+
+# 记录路由 (类似 traceroute)
+ping -c 4 -R www.example.com
+
+# 设置 QoS/DSCP 标记
+ping -c 4 -Q 0x10 www.example.com  # 低延迟标记
+
+# 指定网卡
+ping -c 4 -I eth0 www.example.com
+
+# 计算统计信息后退出
+ping -c 100 -q www.example.com
+
+# 带时间戳的 ping (用于长期监控)
+ping -c 60 -D www.example.com > ping_log.txt
+
+# 使用 IPv6
+ping6 -c 4 www.example.com
+ping -6 -c 4 www.example.com
+```
+
 ### 2. traceroute — 路径追踪
 
 #### 2.1 工作原理
@@ -143,7 +229,50 @@ traceroute -n www.example.com
 traceroute -q 5 www.example.com
 ```
 
-#### 2.3 traceroute 输出解读
+#### 2.3 traceroute 的三种探测模式
+
+| 模式 | 命令 | 协议 | 特点 | 使用场景 |
+|------|------|------|------|---------|
+| UDP (默认) | `traceroute host` | UDP (端口 33434+) | 高端口递增，可能被防火墙拦截 | Linux 默认模式 |
+| ICMP | `traceroute -I host` | ICMP Echo | 需要 root 权限 | 目标禁 UDP 时使用 |
+| TCP | `traceroute -T -p 443 host` | TCP SYN | 绕过大多数防火墙 | 最佳兼容性 |
+
+```bash
+# UDP 模式 (默认)
+traceroute www.example.com
+
+# ICMP 模式 (需要 root)
+sudo traceroute -I www.example.com
+
+# TCP 模式 (绕过 UDP 防火墙)
+traceroute -T -p 443 www.example.com
+
+# TCP 模式连接特定端口
+traceroute -T -p 8080 api.example.com
+
+# 对比三种模式的结果
+echo "=== UDP ===" && traceroute -n -m 15 www.example.com
+echo "=== ICMP ===" && sudo traceroute -I -n -m 15 www.example.com
+echo "=== TCP ===" && traceroute -T -n -m 15 -p 443 www.example.com
+```
+
+**为什么某些跳显示 `* * *`？**
+
+```
+原因 1: 路由器配置了 ICMP 速率限制
+  → 不影响数据转发，只是不回复探测包
+  → 后续跳正常则无需担心
+
+原因 2: 防火墙丢弃了探测包
+  → 尝试使用 TCP 模式 (-T)
+  → 或指定常用端口 (-p 80/443)
+
+原因 3: 真实丢包
+  → 后续跳也显示 * * * 则可能是真实故障
+  → 使用 mtr 进行长时间测试确认
+```
+
+#### 2.4 traceroute 输出解读
 
 ```
 traceroute to www.example.com (93.184.216.34), 30 hops max, 60 byte packets
@@ -234,6 +363,87 @@ Host                   Loss%   Snt   Last   Avg  Best  Wrst StDev
 | 最后一跳高丢包 | 仅终点丢包 | 可能是目标限速 ICMP 或真实丢包 |
 | 全程高丢包 | 所有跳都丢包 | 本机网络或出口问题 |
 
+#### 3.5 mtr 高级用法与长期监测
+
+```bash
+# 长时间监测 (适合间歇性问题)
+# 运行 1 小时，每秒一个包
+mtr -r -c 3600 -i 1 www.example.com > mtr_1h_report.txt
+
+# 后台运行，定期输出报告
+nohup mtr -r -c 3600 -i 1 --json www.example.com > mtr_report.json &
+
+# TCP 模式 (绕过 ICMP 限制)
+mtr -T -p 443 -r -c 100 www.example.com
+
+# UDP 模式
+mtr -u -r -c 100 www.example.com
+
+# 指定源地址
+mtr -a 192.168.1.100 -r -c 100 www.example.com
+
+# 设置包大小
+mtr -s 1500 -r -c 100 www.example.com  # 测试 MTU
+
+# 并行 DNS 解析
+mtr -b -r -c 100 www.example.com
+
+# 输出为 XML 格式
+mtr -r -c 100 --xml www.example.com
+```
+
+**mtr 自动化监控脚本：**
+
+```bash
+#!/bin/bash
+# mtr_monitor.sh - 网络质量持续监控
+# 用法: ./mtr_monitor.sh <目标> [间隔秒数] [次数]
+
+TARGET="${1:?用法: $0 <目标> [间隔秒数] [次数]}"
+INTERVAL="${2:-60}"   # 默认每 60 秒测试一次
+COUNT="${3:-10}"      # 默认每次发 10 个包
+LOG_DIR="./mtr_logs"
+mkdir -p "$LOG_DIR"
+
+echo "开始监控 $TARGET，每 ${INTERVAL}s 测试一次"
+echo "日志目录: $LOG_DIR"
+echo "按 Ctrl+C 停止"
+
+while true; do
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    REPORT_FILE="$LOG_DIR/mtr_${TIMESTAMP}.txt"
+    
+    # 执行 mtr 测试
+    mtr -r -c "$COUNT" -n "$TARGET" > "$REPORT_FILE" 2>/dev/null
+    
+    # 提取最后一跳的指标
+    LAST_LINE=$(tail -1 "$REPORT_FILE")
+    LOSS=$(echo "$LAST_LINE" | awk '{print $3}' | tr -d '%')
+    AVG=$(echo "$LAST_LINE" | awk '{print $5}')
+    
+    # 判断是否异常
+    if [ -n "$LOSS" ] && [ "$LOSS" -gt 5 ] 2>/dev/null; then
+        echo "[$(date)] ⚠️ 警告: $TARGET 丢包 ${LOSS}%，平均延迟 ${AVG}ms"
+        # 可以在这里发送告警通知
+    else
+        echo "[$(date)] ✅ 正常: $TARGET 丢包 ${LOSS}%，平均延迟 ${AVG}ms"
+    fi
+    
+    sleep "$INTERVAL"
+done
+```
+
+#### 3.6 mtr vs traceroute vs ping 对比
+
+| 特性 | ping | traceroute | mtr |
+|------|------|-----------|-----|
+| 功能 | 连通性检测 | 路径追踪 | 路径 + 连通性 |
+| 持续监控 | 需要脚本 | 单次执行 | 内置支持 |
+| 丢包统计 | 仅终点 | 每跳 3 个包 | 每跳持续统计 |
+| 延迟统计 | avg/min/max | 每跳 3 次 | avg/best/wrst/stdev |
+| 输出格式 | 文本 | 文本 | text/csv/json/xml |
+| SRE 推荐场景 | 快速检测 | 路径分析 | **网络质量诊断首选** |
+
 ### 4. dig — DNS 诊断
 
 #### 4.1 dig 常用命令
@@ -308,6 +518,322 @@ www.example.com.        86400   IN      A       93.184.216.34
 | ANSWER SECTION | 回答记录 | 至少 1 条 |
 | Query time | 查询耗时 | < 50ms |
 | SERVER | 使用的 DNS 服务器 | 配置的 DNS |
+
+#### 4.3 dig +trace 详解
+
+`dig +trace` 模拟完整的递归查询过程，从根服务器开始逐级查询：
+
+```bash
+dig +trace www.example.com
+```
+
+**输出解读：**
+
+```
+; <<>> DiG 9.18.1 <<>> +trace www.example.com
+;; global options: +cmd
+
+# 第 1 步: 查询根服务器 (.)
+.                       518400  IN      NS      a.root-servers.net.
+.                       518400  IN      NS      b.root-servers.net.
+...
+;; Received 239 bytes from 8.8.8.8#53(8.8.8.8) in 5 ms
+
+# 第 2 步: 查询 .com TLD 服务器
+com.                    172800  IN      NS      a.gtld-servers.net.
+com.                    172800  IN      NS      b.gtld-servers.net.
+...
+;; Received 1170 bytes from 198.41.0.4#53(a.root-servers.net) in 45 ms
+
+# 第 3 步: 查询 example.com 权威服务器
+example.com.            172800  IN      NS      a.iana-servers.net.
+example.com.            172800  IN      NS      b.iana-servers.net.
+...
+;; Received 248 bytes from 192.5.6.30#53(a.gtld-servers.net) in 38 ms
+
+# 第 4 步: 从权威服务器获取最终结果
+www.example.com.        86400   IN      A       93.184.216.34
+;; Received 59 bytes from 199.43.135.53#53(a.iana-servers.net) in 82 ms
+```
+
+**trace 排查场景：**
+
+```bash
+# 场景 1: DNS 解析慢
+# 观察每步的 Query time，定位慢在哪个层级
+dig +trace +stats www.example.com 2>&1 | grep "Query time"
+
+# 场景 2: DNS 记录不一致
+# 对比 trace 结果和实际解析结果
+dig +trace www.example.com | tail -5
+dig @8.8.8.8 www.example.com +short
+
+# 场景 3: 权威服务器配置问题
+# 直接查询权威服务器
+dig @a.iana-servers.net www.example.com +short
+```
+
+#### 4.4 dig DNSSEC 验证
+
+```bash
+# 查询 DNSSEC 记录
+dig +dnssec www.example.com
+
+# 查看 RRSIG (签名记录)
+dig +dnssec +short www.example.com
+
+# 查看 DS 记录 (委托签名)
+dig DS example.com
+
+# 查看 DNSKEY (公钥)
+dig DNSKEY example.com
+
+# 验证 DNSSEC 链
+dig +trace +dnssec www.example.com
+
+# 检查 DNSSEC 验证状态
+dig +cd +short www.example.com   # 跳过验证 (CD = Checking Disabled)
+dig +short www.example.com       # 正常验证
+```
+
+**DNSSEC 验证链：**
+
+```
+Root DNS (.)
+  │ DS 记录 → .com 的 DS 记录
+  ▼
+.com TLD
+  │ DS 记录 → example.com 的 DS 记录
+  ▼
+example.com 权威服务器
+  │ RRSIG 记录 → 对 A/AAAA 等记录的签名
+  ▼
+www.example.com (最终结果)
+```
+
+#### 4.5 nslookup vs dig 对比
+
+| 特性 | nslookup | dig |
+|------|---------|-----|
+| 输出格式 | 简洁 | 详细 (RFC 格式) |
+| DNSSEC 支持 | 不支持 | 支持 (+dnssec) |
+| 批量查询 | 不支持 | 支持 (-f 文件) |
+| 跟踪解析链 | 不支持 | 支持 (+trace) |
+| 脚本友好 | 一般 | 优秀 (+short) |
+| 记录类型查询 | 支持 | 支持 |
+| 指定 DNS 服务器 | 支持 | 支持 (@server) |
+| SRE 推荐 | 一般 | **首选** |
+
+```bash
+# nslookup 基础用法
+nslookup www.example.com
+nslookup -type=MX example.com
+nslookup www.example.com 8.8.8.8
+
+# dig 等效命令
+dig +short www.example.com
+dig MX example.com +short
+dig @8.8.8.8 www.example.com +short
+
+# dig 独有功能
+dig +trace www.example.com      # nslookup 无法做到
+dig +dnssec www.example.com     # nslookup 无法做到
+dig -f domains.txt +short       # 批量查询
+```
+
+### 5. 网络诊断方法论
+
+#### 5.1 自下而上排查法 (Bottom-Up Approach)
+
+```
+OSI 模型自下而上排查:
+
+Layer 7 (应用层):   HTTP 响应是否正常? ← curl/wget
+Layer 6 (表示层):   TLS 证书是否有效?  ← openssl
+Layer 5 (会话层):   连接是否建立?      ← nc/ss
+Layer 4 (传输层):   TCP/UDP 端口是否通? ← nc/telnet
+Layer 3 (网络层):   IP 路由是否正确?   ← ping/traceroute/mtr
+Layer 2 (数据链路): MAC 地址是否正确?  ← arp/ip neigh
+Layer 1 (物理层):   网线是否插好?      ← ethtool/ip link
+```
+
+```bash
+# 自下而上排查脚本
+check_bottom_up() {
+    local target="$1"
+    echo "=== 自下而上排查: $target ==="
+    
+    # Layer 1-2: 物理/数据链路层
+    echo "[L1/L2] 网卡状态:"
+    ip link show | grep -E "state (UP|DOWN)"
+    
+    # Layer 3: 网络层 (ping)
+    echo "[L3] Ping 测试:"
+    ping -c 3 -W 2 "$target" &>/dev/null && echo "  ✅ 通" || echo "  ❌ 不通"
+    
+    # Layer 4: 传输层 (端口)
+    echo "[L4] TCP 端口测试:"
+    nc -z -w 3 "$target" 80 &>/dev/null && echo "  ✅ 80 端口通" || echo "  ❌ 80 端口不通"
+    nc -z -w 3 "$target" 443 &>/dev/null && echo "  ✅ 443 端口通" || echo "  ❌ 443 端口不通"
+    
+    # Layer 7: 应用层 (HTTP)
+    echo "[L7] HTTP 测试:"
+    local code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "https://$target")
+    echo "  HTTP 状态码: $code"
+}
+```
+
+#### 5.2 二分法定位 (Binary Search)
+
+```
+二分法定位网络问题:
+
+客户端 ←→ [中间点 A] ←→ [中间点 B] ←→ 服务端
+
+步骤 1: ping 客户端 → 服务端 (不通)
+步骤 2: ping 客户端 → 中间点 B (通)
+步骤 3: ping 中间点 B → 服务端 (不通)
+步骤 4: 问题在 B → 服务端之间
+
+继续二分:
+步骤 5: ping 中间点 C → 服务端 (通)
+步骤 6: 问题在 B → C 之间
+```
+
+```bash
+# 二分法定位脚本
+binary_search_network() {
+    local hops=("192.168.1.1" "10.0.0.1" "172.16.0.1" "203.0.113.1" "93.184.216.34")
+    local names=("网关" "接入层" "汇聚层" "核心层" "目标服务器")
+    
+    echo "=== 二分法定位网络问题 ==="
+    
+    local left=0
+    local right=$(( ${#hops[@]} - 1 ))
+    
+    while [ $left -lt $right ]; do
+        local mid=$(( (left + right) / 2 ))
+        echo "测试 ${names[$mid]} (${hops[$mid]})..."
+        
+        if ping -c 1 -W 2 "${hops[$mid]}" &>/dev/null; then
+            echo "  ✅ 可达，问题在 ${names[$mid]} 之后"
+            left=$((mid + 1))
+        else
+            echo "  ❌ 不可达，问题在 ${names[$mid]} 之前或该节点"
+            right=$mid
+        fi
+    done
+    
+    echo "问题定位: ${names[$left]} (${hops[$left]})"
+}
+```
+
+---
+
+## 🎯 面试题精选
+
+### 面试题 1：ping 和 traceroute 的原理区别是什么？
+
+**参考答案：**
+
+| 方面 | ping | traceroute |
+|------|------|-----------|
+| 协议 | ICMP Echo Request/Reply | UDP/ICMP + ICMP Time Exceeded |
+| 目的 | 检测端到端连通性 | 追踪每一跳路径 |
+| TTL | 使用默认 TTL (64/128) | 从 1 开始递增 |
+| 结果 | 终点的延迟和丢包 | 每一跳的延迟和可达性 |
+| 使用场景 | 快速检测服务是否可达 | 定位网络瓶颈在哪个节点 |
+
+traceroute 的核心原理：利用 TTL 递减机制，当 TTL=0 时路由器返回 ICMP Time Exceeded 消息，从而获取每一跳路由器的 IP 和延迟。
+
+### 面试题 2：如何排查网络丢包？
+
+**参考答案：**
+
+排查步骤：
+1. **确认丢包范围**：`ping` 测试基本连通性，观察丢包率
+2. **定位丢包位置**：`mtr -r -c 100 目标`，逐跳分析丢包
+3. **判断丢包类型**：
+   - 中间丢后面好 → 该路由器限速 ICMP，非真实丢包
+   - 中间丢后面也丢 → 真实丢包，该跳是故障点
+   - 全部丢 → 本地网络问题
+4. **验证**：从不同网络（不同运营商、不同地区）测试
+5. **处理**：联系运营商/网络团队、切换备用线路
+
+### 面试题 3：mtr 输出中，中间某跳丢包但后续正常，是为什么？
+
+**参考答案：**
+
+这是最常见的 mtr 误判。原因是中间路由器配置了 ICMP 速率限制（ICMP Rate Limiting），对 ICMP Time Exceeded 消息进行了限速，但数据包实际正常转发。
+
+判断规则：**看最后一跳的丢包率**。如果最后一跳 0% 丢包，即使中间有跳显示丢包，网络也是正常的。
+
+只有当某一跳开始丢包，且后续所有跳（包括终点）都显示相同或更高丢包率时，才是真实丢包。
+
+### 面试题 4：dig +trace 的输出中，每一步代表什么？
+
+**参考答案：**
+
+`dig +trace` 模拟递归解析器的完整查询过程：
+1. **根服务器查询**：获取 .com TLD 服务器的 NS 记录
+2. **TLD 服务器查询**：获取 example.com 权威服务器的 NS 记录
+3. **权威服务器查询**：获取最终的 A/AAAA 记录
+
+每一步的 `Received ... bytes from ... in ... ms` 显示了从哪个服务器收到了多少字节的响应，以及耗时多少毫秒。通过观察每步的耗时，可以定位 DNS 解析慢的原因。
+
+### 面试题 5：如何用命令行验证 DNS 记录是否生效？
+
+**参考答案：**
+
+```bash
+# 1. 对比多个 DNS 服务器的结果
+dig @8.8.8.8 www.example.com +short
+dig @1.1.1.1 www.example.com +short
+dig @223.5.5.5 www.example.com +short
+
+# 2. 追踪完整解析链
+dig +trace www.example.com
+
+# 3. 查询特定记录类型
+dig MX example.com +short
+dig TXT example.com +short
+
+# 4. 检查 TTL
+dig www.example.com | grep -A1 "ANSWER SECTION"
+
+# 5. 检查 DNSSEC
+dig +dnssec www.example.com
+```
+
+### 面试题 6：ping 的 TTL 字段有什么用？如何通过 TTL 推断操作系统？
+
+**参考答案：**
+
+TTL (Time To Live) 是 IP 数据包的生存时间，每经过一个路由器减 1。当 TTL=0 时，路由器丢弃数据包并返回 ICMP Time Exceeded 消息。TTL 的作用是防止数据包在网络中无限循环。
+
+通过收到的 TTL 值可以推断对方的操作系统：
+- TTL ≤ 64：Linux/macOS/BSD（初始 TTL 通常是 64）
+- TTL ≤ 128：Windows（初始 TTL 通常是 128）
+- TTL ≤ 255：网络设备如路由器/交换机（初始 TTL 通常是 255）
+
+实际推断方法：如果收到 TTL=52，那么初始 TTL 很可能是 64（64-52=12 跳）。
+
+### 面试题 7：fping 和 ping 有什么区别？
+
+**参考答案：**
+
+| 特性 | ping | fping |
+|------|------|-------|
+| 目标数量 | 单个 | 多个 (并行) |
+| 输出格式 | 逐行显示 | 汇总统计 |
+| 脚本友好 | 一般 | 优秀 (CSV/退出码) |
+| 性能 | 逐个测试 | 并行测试 |
+| 使用场景 | 单目标连通性 | 批量主机存活扫描、网络质量对比 |
+
+fping 特别适合 SRE 场景：
+- 批量检查服务器存活状态
+- 多节点网络质量对比
+- 自动化网络监控脚本
 
 ---
 
@@ -714,6 +1240,35 @@ mtr 丢包判断口诀:
 | mtr 实战 | ⭐⭐⭐⭐⭐ | 能独立分析丢包原因 |
 | dig DNS 诊断 | ⭐⭐⭐⭐ | 能排查 DNS 问题 |
 | 脚本编写 | ⭐⭐⭐⭐ | 能编写自动化诊断脚本 |
+
+---
+
+## ✅ 自检清单
+
+### 理论检查点
+- [ ] 能解释 ICMP Echo Request/Reply 的工作原理
+- [ ] 能说明 TTL 机制以及 traceroute 如何利用它
+- [ ] 能区分 mtr 输出中的真实丢包和 ICMP 限速
+- [ ] 能解释 DNS 递归查询和迭代查询的区别
+- [ ] 能说明 DNSSEC 的验证链（Root → TLD → 权威）
+- [ ] 能解释 ping 的 MTU 路径发现原理
+
+### 实操检查点
+- [ ] 能用 `ping -M do -s` 测试路径 MTU
+- [ ] 能用 `traceroute -T -p 443` 绕过 ICMP 防火墙
+- [ ] 能用 `mtr -r -c 100` 生成网络质量报告
+- [ ] 能用 `dig +trace` 追踪完整 DNS 解析链
+- [ ] 能用 `dig +dnssec` 验证 DNSSEC 签名
+- [ ] 能用 fping 批量测试多目标延迟
+- [ ] 能编写自动化网络诊断脚本
+- [ ] 能用 mtr 实现持续网络质量监控
+
+### 故障排查能力检查
+- [ ] 能通过 mtr 报告定位运营商丢包问题
+- [ ] 能通过 dig 对比不同 DNS 服务器的结果
+- [ ] 能通过 traceroute 发现路由环路
+- [ ] 能用二分法定位网络故障节点
+- [ ] 能区分客户端、运营商、服务端的网络问题
 
 ---
 
